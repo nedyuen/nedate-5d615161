@@ -167,8 +167,8 @@ function RequestPage() {
 
           <div className="mt-10 flex items-center justify-between">
             <button
-              onClick={() => setStep((s) => Math.max(1, s - 1))}
-              disabled={step === 1}
+              onClick={() => setStep((s) => Math.max(cat ? 2 : 1, s - 1))}
+              disabled={step === (cat ? 2 : 1)}
               className="inline-flex items-center gap-1.5 rounded-full px-5 py-3 text-sm text-muted-foreground hover:text-primary disabled:opacity-30"
             >
               <ArrowLeft className="size-4" /> Back
