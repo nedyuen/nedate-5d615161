@@ -14,7 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      requests: {
+        Row: {
+          admin_comment: string | null
+          category: string
+          created_at: string
+          custom_venue: string | null
+          end_time: string
+          id: string
+          pitch: string
+          requester_email: string
+          requester_name: string
+          slug: string
+          start_time: string
+          status: string
+          updated_at: string
+          venue_id: string | null
+        }
+        Insert: {
+          admin_comment?: string | null
+          category: string
+          created_at?: string
+          custom_venue?: string | null
+          end_time: string
+          id?: string
+          pitch: string
+          requester_email: string
+          requester_name: string
+          slug?: string
+          start_time: string
+          status?: string
+          updated_at?: string
+          venue_id?: string | null
+        }
+        Update: {
+          admin_comment?: string | null
+          category?: string
+          created_at?: string
+          custom_venue?: string | null
+          end_time?: string
+          id?: string
+          pitch?: string
+          requester_email?: string
+          requester_name?: string
+          slug?: string
+          start_time?: string
+          status?: string
+          updated_at?: string
+          venue_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requests_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      venues: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          location: string | null
+          name: string
+          url: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          location?: string | null
+          name: string
+          url?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          location?: string | null
+          name?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
