@@ -1,7 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import nedHero from "@/assets/ned-hero.jpg";
-import { CATEGORIES } from "@/lib/nedate";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { ArrowRight, MapPin, Sparkles } from "lucide-react";
+
+const BUCKET_CATEGORY = "ned's bucket list item";
+
+type Venue = { id: string; name: string; description: string | null; location: string | null; image_url: string | null; category: string };
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -14,6 +19,12 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
+  const [bucketVenues, setBucketVenues] = useState<Venue[]>([]);
+  useEffect(() => {
+    supabase.from("venues").select("*").eq("category", BUCKET_CATEGORY).then(({ data }) => {
+      setBucketVenues((data ?? []) as Venue[]);
+    });
+  }, []);
   return (
     <div className="min-h-screen bg-background">
       {/* nav */}
@@ -84,24 +95,40 @@ function Landing() {
           <div className="flex items-end justify-between gap-4 mb-8">
             <div>
               <h2 className="font-display text-3xl text-primary sm:text-4xl">What should we do?</h2>
-              <p className="mt-2 text-muted-foreground">Pick a vibe. We'll figure out the rest together.</p>
+              <p className="mt-2 text-muted-foreground">Help me cross something off my bucket list. Pick one and we'll plan it.</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3">
-            {CATEGORIES.map((c) => (
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {bucketVenues.map((v) => (
               <Link
-                key={c.id}
+                key={v.id}
                 to="/request"
-                search={{ cat: c.id }}
-                className="group relative overflow-hidden rounded-3xl bg-card p-5 sm:p-6 shadow-soft hover:shadow-warm transition border border-border/50"
+                search={{ cat: BUCKET_CATEGORY, venue: v.id }}
+                className="group relative overflow-hidden rounded-3xl bg-card shadow-soft hover:shadow-warm transition border border-border/50"
               >
-                <div className="text-4xl sm:text-5xl">{c.emoji}</div>
-                <div className="mt-4 font-display text-xl text-primary">{c.label}</div>
-                <div className="mt-1 text-sm text-muted-foreground">{c.blurb}</div>
-                <ArrowRight className="absolute top-5 right-5 size-4 text-primary/30 group-hover:text-primary group-hover:translate-x-0.5 transition" />
+                {v.image_url && (
+                  <img src={v.image_url} alt={v.name} className="aspect-[16/10] w-full object-cover group-hover:scale-[1.02] transition" loading="lazy" />
+                )}
+                <div className="p-5">
+                  <div className="font-display text-xl text-primary">{v.name}</div>
+                  {v.description && <div className="mt-1 text-sm text-muted-foreground line-clamp-2">{v.description}</div>}
+                  {v.location && (
+                    <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <MapPin className="size-3.5" /> {v.location}
+                    </div>
+                  )}
+                  <div className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+                    Plan this with Ned <ArrowRight className="size-4 group-hover:translate-x-0.5 transition" />
+                  </div>
+                </div>
               </Link>
             ))}
+            {bucketVenues.length === 0 && (
+              <div className="col-span-full rounded-3xl border border-dashed border-border/60 p-10 text-center text-muted-foreground">
+                Ned's bucket list is empty right now. Check back soon.
+              </div>
+            )}
           </div>
         </div>
       </section>

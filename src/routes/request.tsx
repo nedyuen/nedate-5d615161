@@ -6,7 +6,7 @@ import { CATEGORIES, categoryMeta, type CategoryId } from "@/lib/nedate";
 import { ArrowLeft, ArrowRight, Check, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
-const searchSchema = z.object({ cat: z.string().optional() });
+const searchSchema = z.object({ cat: z.string().optional(), venue: z.string().optional() });
 
 export const Route = createFileRoute("/request")({
   validateSearch: (s) => searchSchema.parse(s),
@@ -17,8 +17,9 @@ export const Route = createFileRoute("/request")({
 type Venue = { id: string; name: string; description: string | null; location: string | null; image_url: string | null; category: string };
 
 function RequestPage() {
-  const { cat } = Route.useSearch();
+  const { cat, venue } = Route.useSearch();
   const navigate = useNavigate();
+  const venuePreset = !!venue;
   const [step, setStep] = useState(cat ? 2 : 1);
   const [category, setCategory] = useState<string>(cat ?? "");
   const [name, setName] = useState("");
@@ -27,9 +28,10 @@ function RequestPage() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [venueId, setVenueId] = useState<string | null>(null);
+  const [venueId, setVenueId] = useState<string | null>(venue ?? null);
   const [customVenue, setCustomVenue] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const totalSteps = venuePreset ? 3 : 4;
 
   useEffect(() => {
     if (!category) return;
@@ -66,11 +68,11 @@ function RequestPage() {
       <header className="px-5 pt-6 sm:px-10">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <Link to="/" className="font-display text-2xl text-primary">Nedate</Link>
-          <div className="text-sm text-muted-foreground">Step {step} of 4</div>
+          <div className="text-sm text-muted-foreground">Step {step - (cat ? 1 : 0)} of {totalSteps - (cat ? 1 : 0)}</div>
         </div>
         <div className="mx-auto mt-4 max-w-3xl">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div className="h-full bg-primary transition-all" style={{ width: `${(step / 4) * 100}%` }} />
+            <div className="h-full bg-primary transition-all" style={{ width: `${((step - (cat ? 1 : 0)) / (totalSteps - (cat ? 1 : 0))) * 100}%` }} />
           </div>
         </div>
       </header>
@@ -165,13 +167,13 @@ function RequestPage() {
 
           <div className="mt-10 flex items-center justify-between">
             <button
-              onClick={() => setStep((s) => Math.max(1, s - 1))}
-              disabled={step === 1}
+              onClick={() => setStep((s) => Math.max(cat ? 2 : 1, s - 1))}
+              disabled={step === (cat ? 2 : 1)}
               className="inline-flex items-center gap-1.5 rounded-full px-5 py-3 text-sm text-muted-foreground hover:text-primary disabled:opacity-30"
             >
               <ArrowLeft className="size-4" /> Back
             </button>
-            {step < 4 ? (
+            {step < totalSteps ? (
               <button
                 onClick={() => setStep((s) => s + 1)}
                 disabled={!canNext()}
