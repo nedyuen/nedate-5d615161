@@ -17,8 +17,9 @@ export const Route = createFileRoute("/request")({
 type Venue = { id: string; name: string; description: string | null; location: string | null; image_url: string | null; category: string };
 
 function RequestPage() {
-  const { cat } = Route.useSearch();
+  const { cat, venue } = Route.useSearch();
   const navigate = useNavigate();
+  const venuePreset = !!venue;
   const [step, setStep] = useState(cat ? 2 : 1);
   const [category, setCategory] = useState<string>(cat ?? "");
   const [name, setName] = useState("");
@@ -27,9 +28,10 @@ function RequestPage() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [venueId, setVenueId] = useState<string | null>(null);
+  const [venueId, setVenueId] = useState<string | null>(venue ?? null);
   const [customVenue, setCustomVenue] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const totalSteps = venuePreset ? 3 : 4;
 
   useEffect(() => {
     if (!category) return;
