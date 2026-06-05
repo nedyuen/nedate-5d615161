@@ -6,7 +6,7 @@ import { CATEGORIES, categoryMeta, type CategoryId } from "@/lib/nedate";
 import { ArrowLeft, ArrowRight, Check, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
-const searchSchema = z.object({ cat: z.string().optional() });
+const searchSchema = z.object({ cat: z.string().optional(), venue: z.string().optional() });
 
 export const Route = createFileRoute("/request")({
   validateSearch: (s) => searchSchema.parse(s),
