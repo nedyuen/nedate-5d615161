@@ -1,7 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import nedHero from "@/assets/ned-hero.jpg";
-import { CATEGORIES } from "@/lib/nedate";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { ArrowRight, MapPin, Sparkles } from "lucide-react";
+
+const BUCKET_CATEGORY = "ned's bucket list item";
+
+type Venue = { id: string; name: string; description: string | null; location: string | null; image_url: string | null; category: string };
 
 export const Route = createFileRoute("/")({
   head: () => ({
