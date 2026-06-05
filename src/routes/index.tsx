@@ -19,6 +19,12 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
+  const [bucketVenues, setBucketVenues] = useState<Venue[]>([]);
+  useEffect(() => {
+    supabase.from("venues").select("*").eq("category", BUCKET_CATEGORY).then(({ data }) => {
+      setBucketVenues((data ?? []) as Venue[]);
+    });
+  }, []);
   return (
     <div className="min-h-screen bg-background">
       {/* nav */}
