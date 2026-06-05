@@ -68,11 +68,11 @@ function RequestPage() {
       <header className="px-5 pt-6 sm:px-10">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <Link to="/" className="font-display text-2xl text-primary">Nedate</Link>
-          <div className="text-sm text-muted-foreground">Step {step} of 4</div>
+          <div className="text-sm text-muted-foreground">Step {step - (cat ? 1 : 0)} of {totalSteps - (cat ? 1 : 0)}</div>
         </div>
         <div className="mx-auto mt-4 max-w-3xl">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div className="h-full bg-primary transition-all" style={{ width: `${(step / 4) * 100}%` }} />
+            <div className="h-full bg-primary transition-all" style={{ width: `${((step - (cat ? 1 : 0)) / (totalSteps - (cat ? 1 : 0))) * 100}%` }} />
           </div>
         </div>
       </header>
