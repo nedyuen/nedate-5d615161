@@ -173,7 +173,7 @@ function RequestPage() {
             >
               <ArrowLeft className="size-4" /> Back
             </button>
-            {step < 4 ? (
+            {step < totalSteps ? (
               <button
                 onClick={() => setStep((s) => s + 1)}
                 disabled={!canNext()}
