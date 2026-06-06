@@ -126,7 +126,7 @@ function RequestPage() {
                 <Field label="Your name">
                   <input value={name} onChange={(e) => setName(e.target.value)} className="input" placeholder="Alex Rivera" />
                 </Field>
-                <Field label="Email">
+                <Field label="Email" hint="We'll use this to send you a confirmation and to let you know once Ned responds.">
                   <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="input" placeholder="alex@example.com" />
                 </Field>
                 <Field label="Pitch the date" hint="Why would this be fun? What's the spark?">
