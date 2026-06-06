@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, categoryMeta, type CategoryId } from "@/lib/nedate";
 import { ArrowLeft, ArrowRight, Check, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
+import { sendRequestConfirmation } from "@/lib/email.functions";
+import { fmtRange } from "@/lib/nedate";
 
 const searchSchema = z.object({ cat: z.string().optional(), venue: z.string().optional() });
 
@@ -53,13 +55,33 @@ function RequestPage() {
       return;
     }
     setSubmitting(true);
+    const startIso = new Date(start).toISOString();
+    const endIso = new Date(end).toISOString();
     const { data, error } = await supabase.from("requests").insert({
       category, requester_name: name, requester_email: email, pitch,
-      start_time: new Date(start).toISOString(), end_time: new Date(end).toISOString(),
+      start_time: startIso, end_time: endIso,
       venue_id: venueId, custom_venue: venueId ? null : customVenue.trim(),
     }).select("slug").single();
+    if (error || !data) { setSubmitting(false); toast.error("Couldn't send your request"); return; }
+    const chosenVenue = venues.find((v) => v.id === venueId);
+    const venueText = chosenVenue
+      ? chosenVenue.name + (chosenVenue.location ? ` · ${chosenVenue.location}` : "")
+      : customVenue.trim();
+    try {
+      await sendRequestConfirmation({
+        data: {
+          to: email,
+          name,
+          pitch,
+          venue: venueText,
+          when: fmtRange(startIso, endIso),
+          trackingUrl: `${window.location.origin}/r/${data.slug}`,
+        },
+      });
+    } catch (e) {
+      console.error("Confirmation email failed", e);
+    }
     setSubmitting(false);
-    if (error || !data) { toast.error("Couldn't send your request"); return; }
     navigate({ to: "/r/$slug", params: { slug: data.slug } });
   }
 
