@@ -55,10 +55,9 @@ function RequestPage() {
     }
     setSubmitting(true);
     const startIso = new Date(start).toISOString();
-    const endIso = new Date(end).toISOString();
     const { data, error } = await supabase.from("requests").insert({
       category, requester_name: name, requester_email: email, pitch,
-      start_time: startIso, end_time: endIso,
+      start_time: startIso, end_time: null,
       venue_id: venueId, custom_venue: venueId ? null : customVenue.trim(),
     }).select("slug").single();
     if (error || !data) { setSubmitting(false); toast.error("Couldn't send your request"); return; }
