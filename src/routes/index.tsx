@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import nedHero from "@/assets/ned-hero.jpg";
+import nedHero from "@/assets/ned-hero.jpg.asset.json";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowRight, MapPin, Sparkles } from "lucide-react";
 
