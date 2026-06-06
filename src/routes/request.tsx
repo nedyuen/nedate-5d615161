@@ -72,7 +72,7 @@ function RequestPage() {
           name,
           pitch,
           venue: venueText,
-          when: fmtRange(startIso, endIso),
+          when: fmtRange(startIso),
           trackingUrl: `${window.location.origin}/r/${data.slug}`,
         },
       });
