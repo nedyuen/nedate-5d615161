@@ -28,7 +28,6 @@ function RequestPage() {
   const [email, setEmail] = useState("");
   const [pitch, setPitch] = useState("");
   const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venueId, setVenueId] = useState<string | null>(venue ?? null);
   const [customVenue, setCustomVenue] = useState("");
