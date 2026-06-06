@@ -44,7 +44,7 @@ function RequestPage() {
   const canNext = () => {
     if (step === 1) return !!category;
     if (step === 2) return name.trim().length >= 2 && /\S+@\S+\.\S+/.test(email) && pitch.trim().length >= 10;
-    if (step === 3) return !!start && !!end && new Date(end) > new Date(start);
+    if (step === 3) return !!start;
     return false;
   };
 
