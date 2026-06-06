@@ -107,7 +107,7 @@ function RequestPage() {
                   return (
                     <button
                       key={c.id}
-                      onClick={() => { setCategory(c.id); setVenueId(null); }}
+                      onClick={() => { setCategory(c.id); setVenueId(null); setStep(2); }}
                       className={`group rounded-3xl border p-5 text-left transition shadow-soft ${active ? "border-primary bg-primary text-primary-foreground" : "border-border/60 bg-card hover:border-primary/40"}`}
                     >
                       <div className="text-3xl">{c.emoji}</div>
