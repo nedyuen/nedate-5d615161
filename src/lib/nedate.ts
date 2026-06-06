@@ -19,14 +19,16 @@ export function categoryMeta(id: string) {
   return CATEGORIES.find((c) => c.id === id) ?? { id, label: id, emoji: "✨", blurb: "" };
 }
 
-export function fmtRange(start: string, end: string) {
+export function fmtRange(start: string, end?: string | null) {
   const s = new Date(start);
-  const e = new Date(end);
-  const sameDay = s.toDateString() === e.toDateString();
   const dateOpts: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" };
   const timeOpts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const startText = `${s.toLocaleDateString(undefined, dateOpts)} · ${s.toLocaleTimeString(undefined, timeOpts)}`;
+  if (!end) return startText;
+  const e = new Date(end);
+  const sameDay = s.toDateString() === e.toDateString();
   if (sameDay) {
-    return `${s.toLocaleDateString(undefined, dateOpts)} · ${s.toLocaleTimeString(undefined, timeOpts)} – ${e.toLocaleTimeString(undefined, timeOpts)}`;
+    return `${startText} – ${e.toLocaleTimeString(undefined, timeOpts)}`;
   }
-  return `${s.toLocaleDateString(undefined, dateOpts)} ${s.toLocaleTimeString(undefined, timeOpts)} → ${e.toLocaleDateString(undefined, dateOpts)} ${e.toLocaleTimeString(undefined, timeOpts)}`;
+  return `${startText} → ${e.toLocaleDateString(undefined, dateOpts)} ${e.toLocaleTimeString(undefined, timeOpts)}`;
 }
