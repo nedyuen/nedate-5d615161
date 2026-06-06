@@ -20,7 +20,7 @@ export type Database = {
           category: string
           created_at: string
           custom_venue: string | null
-          end_time: string
+          end_time: string | null
           id: string
           pitch: string
           requester_email: string
@@ -36,7 +36,7 @@ export type Database = {
           category: string
           created_at?: string
           custom_venue?: string | null
-          end_time: string
+          end_time?: string | null
           id?: string
           pitch: string
           requester_email: string
@@ -52,7 +52,7 @@ export type Database = {
           category?: string
           created_at?: string
           custom_venue?: string | null
-          end_time?: string
+          end_time?: string | null
           id?: string
           pitch?: string
           requester_email?: string

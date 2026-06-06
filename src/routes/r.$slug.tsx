@@ -12,7 +12,7 @@ export const Route = createFileRoute("/r/$slug")({
 
 type Req = {
   id: string; slug: string; category: string; requester_name: string; pitch: string;
-  start_time: string; end_time: string; status: string; admin_comment: string | null;
+  start_time: string; end_time: string | null; status: string; admin_comment: string | null;
   custom_venue: string | null;
   venue: { name: string; location: string | null; image_url: string | null } | null;
 };
@@ -102,7 +102,15 @@ function StatusPage() {
             </div>
           </div>
 
-          <div className="mt-6 text-xs text-muted-foreground">Request ID: {req.slug}</div>
+          <div className="mt-8 flex items-center justify-between gap-3">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shadow-soft hover:bg-primary/90 transition"
+            >
+              Back to home
+            </Link>
+            <div className="text-xs text-muted-foreground">Request ID: {req.slug}</div>
+          </div>
         </div>
       </main>
     </div>

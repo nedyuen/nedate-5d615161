@@ -28,7 +28,6 @@ function RequestPage() {
   const [email, setEmail] = useState("");
   const [pitch, setPitch] = useState("");
   const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venueId, setVenueId] = useState<string | null>(venue ?? null);
   const [customVenue, setCustomVenue] = useState("");
@@ -45,7 +44,7 @@ function RequestPage() {
   const canNext = () => {
     if (step === 1) return !!category;
     if (step === 2) return name.trim().length >= 2 && /\S+@\S+\.\S+/.test(email) && pitch.trim().length >= 10;
-    if (step === 3) return !!start && !!end && new Date(end) > new Date(start);
+    if (step === 3) return !!start;
     return false;
   };
 
@@ -56,10 +55,9 @@ function RequestPage() {
     }
     setSubmitting(true);
     const startIso = new Date(start).toISOString();
-    const endIso = new Date(end).toISOString();
     const { data, error } = await supabase.from("requests").insert({
       category, requester_name: name, requester_email: email, pitch,
-      start_time: startIso, end_time: endIso,
+      start_time: startIso, end_time: null,
       venue_id: venueId, custom_venue: venueId ? null : customVenue.trim(),
     }).select("slug").single();
     if (error || !data) { setSubmitting(false); toast.error("Couldn't send your request"); return; }
@@ -74,7 +72,7 @@ function RequestPage() {
           name,
           pitch,
           venue: venueText,
-          when: fmtRange(startIso, endIso),
+          when: fmtRange(startIso),
           trackingUrl: `${window.location.origin}/r/${data.slug}`,
         },
       });
@@ -109,7 +107,7 @@ function RequestPage() {
                   return (
                     <button
                       key={c.id}
-                      onClick={() => { setCategory(c.id); setVenueId(null); }}
+                      onClick={() => { setCategory(c.id); setVenueId(null); setStep(2); }}
                       className={`group rounded-3xl border p-5 text-left transition shadow-soft ${active ? "border-primary bg-primary text-primary-foreground" : "border-border/60 bg-card hover:border-primary/40"}`}
                     >
                       <div className="text-3xl">{c.emoji}</div>
@@ -128,7 +126,7 @@ function RequestPage() {
                 <Field label="Your name">
                   <input value={name} onChange={(e) => setName(e.target.value)} className="input" placeholder="Alex Rivera" />
                 </Field>
-                <Field label="Email">
+                <Field label="Email" hint="We'll use this to send you a confirmation and to let you know once Ned responds.">
                   <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="input" placeholder="alex@example.com" />
                 </Field>
                 <Field label="Pitch the date" hint="Why would this be fun? What's the spark?">
@@ -139,10 +137,11 @@ function RequestPage() {
           )}
 
           {step === 3 && (
-            <Section title="When?" subtitle="Propose a window. We can always adjust.">
+            <Section title="When?" subtitle="Propose a time. We can always adjust.">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Starts"><input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="input" /></Field>
-                <Field label="Ends"><input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="input" /></Field>
+                <Field label="When" hint="Pick to the nearest 15 minutes.">
+                  <input type="datetime-local" step={900} value={start} onChange={(e) => setStart(e.target.value)} className="input" />
+                </Field>
               </div>
             </Section>
           )}
@@ -195,7 +194,9 @@ function RequestPage() {
             >
               <ArrowLeft className="size-4" /> Back
             </button>
-            {step < totalSteps ? (
+            {step === 1 ? (
+              <span />
+            ) : step < totalSteps ? (
               <button
                 onClick={() => setStep((s) => s + 1)}
                 disabled={!canNext()}
