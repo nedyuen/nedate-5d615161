@@ -74,7 +74,7 @@ function Landing() {
             <div className="relative">
               <div className="absolute -inset-3 rounded-[2rem] bg-accent/30 rotate-2" aria-hidden />
               <img
-                src={nedHero}
+                src={nedHero.url}
                 alt="Ned smiling"
                 width={1024}
                 height={1024}
