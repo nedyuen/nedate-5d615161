@@ -1,0 +1,1 @@
+ALTER TABLE public.requests ALTER COLUMN end_time DROP NOT NULL;
