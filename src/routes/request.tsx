@@ -137,10 +137,11 @@ function RequestPage() {
           )}
 
           {step === 3 && (
-            <Section title="When?" subtitle="Propose a window. We can always adjust.">
+            <Section title="When?" subtitle="Propose a time. We can always adjust.">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Starts"><input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="input" /></Field>
-                <Field label="Ends"><input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="input" /></Field>
+                <Field label="When" hint="Pick to the nearest 15 minutes.">
+                  <input type="datetime-local" step={900} value={start} onChange={(e) => setStart(e.target.value)} className="input" />
+                </Field>
               </div>
             </Section>
           )}
