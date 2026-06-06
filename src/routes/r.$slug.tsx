@@ -12,7 +12,7 @@ export const Route = createFileRoute("/r/$slug")({
 
 type Req = {
   id: string; slug: string; category: string; requester_name: string; pitch: string;
-  start_time: string; end_time: string; status: string; admin_comment: string | null;
+  start_time: string; end_time: string | null; status: string; admin_comment: string | null;
   custom_venue: string | null;
   venue: { name: string; location: string | null; image_url: string | null } | null;
 };
