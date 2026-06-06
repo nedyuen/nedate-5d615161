@@ -102,7 +102,15 @@ function StatusPage() {
             </div>
           </div>
 
-          <div className="mt-6 text-xs text-muted-foreground">Request ID: {req.slug}</div>
+          <div className="mt-8 flex items-center justify-between gap-3">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shadow-soft hover:bg-primary/90 transition"
+            >
+              Back to home
+            </Link>
+            <div className="text-xs text-muted-foreground">Request ID: {req.slug}</div>
+          </div>
         </div>
       </main>
     </div>
