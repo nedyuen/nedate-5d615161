@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_PASSWORD, ADMIN_STORAGE_KEY, CATEGORIES, categoryMeta, fmtRange } from "@/lib/nedate";
 import { Check, Loader2, LogOut, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { sendRequestUpdate } from "@/lib/email.functions";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — Nedate" }] }),
@@ -130,10 +131,29 @@ function RequestModal({ req, onClose, onUpdated }: { req: Req; onClose: () => vo
 
   async function decide(status: "approved" | "rejected") {
     setSaving(status);
-    const { error } = await supabase.from("requests").update({ status, admin_comment: comment.trim() || null, updated_at: new Date().toISOString() }).eq("id", req.id);
+    const trimmed = comment.trim() || null;
+    const { error } = await supabase.from("requests").update({ status, admin_comment: trimmed, updated_at: new Date().toISOString() }).eq("id", req.id);
+    if (error) { setSaving(null); toast.error("Update failed"); return; }
+    const venueText = req.venue
+      ? req.venue.name + (req.venue.location ? ` · ${req.venue.location}` : "")
+      : (req.custom_venue ?? "TBD");
+    try {
+      await sendRequestUpdate({
+        data: {
+          to: req.requester_email,
+          name: req.requester_name,
+          status,
+          comment: trimmed,
+          venue: venueText,
+          when: fmtRange(req.start_time, req.end_time),
+          trackingUrl: `${window.location.origin}/r/${req.slug}`,
+        },
+      });
+    } catch (e) {
+      console.error("Update email failed", e);
+    }
     setSaving(null);
-    if (error) { toast.error("Update failed"); return; }
-    toast.success(`Marked ${status}`);
+    toast.success(`Marked ${status} · email sent`);
     onUpdated();
   }
 
