@@ -135,7 +135,7 @@ function Landing() {
 
       <footer className="px-5 pb-10 sm:px-10">
         <div className="mx-auto max-w-6xl border-t border-border/60 pt-6 text-sm text-muted-foreground flex justify-between flex-wrap gap-3">
-          <span>© Nedate. Made with care.</span>
+          <span>© Nedate. Turning plans into memories.</span>
           <Link to="/admin" className="hover:text-primary">Admin</Link>
         </div>
       </footer>
