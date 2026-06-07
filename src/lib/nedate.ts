@@ -32,3 +32,21 @@ export function fmtRange(start: string, end?: string | null) {
   }
   return `${startText} → ${e.toLocaleDateString(undefined, dateOpts)} ${e.toLocaleTimeString(undefined, timeOpts)}`;
 }
+
+export type VenueDisplay = { name: string; location: string | null; imageUrl: string | null };
+
+export function venueDisplay(h: {
+  venue?: { name: string; location: string | null; image_url: string | null } | null;
+  custom_venue_name?: string | null;
+  custom_venue_location?: string | null;
+  custom_venue_image_url?: string | null;
+}): VenueDisplay {
+  if (h.venue) {
+    return { name: h.venue.name, location: h.venue.location, imageUrl: h.venue.image_url };
+  }
+  return {
+    name: h.custom_venue_name ?? "TBD",
+    location: h.custom_venue_location ?? null,
+    imageUrl: h.custom_venue_image_url ?? null,
+  };
+}
