@@ -142,8 +142,8 @@ function Landing() {
         <div className="mx-auto max-w-6xl">
           <div className="flex items-end justify-between gap-4 mb-8">
             <div>
-              <h2 className="font-display text-3xl text-primary sm:text-4xl">What should we do?</h2>
-              <p className="mt-2 text-muted-foreground">Help me cross something off my bucket list. Pick one and we'll plan it.</p>
+              <h2 className="font-display text-3xl text-primary sm:text-4xl">Ned's Bucket List</h2>
+              <p className="mt-2 text-muted-foreground">Help me cross something off the list. Pick one and we'll plan it.</p>
             </div>
           </div>
 
