@@ -100,8 +100,8 @@ function Landing() {
         <section className="px-5 pb-16 sm:px-10">
           <div className="mx-auto max-w-6xl">
             <div className="mb-8">
-              <h2 className="font-display text-3xl text-primary sm:text-4xl">Upcoming hangouts</h2>
-              <p className="mt-2 text-muted-foreground">Public plans on the calendar. Ask to join one.</p>
+              <h2 className="font-display text-3xl text-primary sm:text-4xl">Ned's Existing Plans</h2>
+              <p className="mt-2 text-muted-foreground">Latest hangouts open to friends. Ask to join one.</p>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {upcoming.map((h) => {
