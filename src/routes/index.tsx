@@ -1,8 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import nedHero from "@/assets/ned-hero.jpg.asset.json";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowRight, MapPin, Sparkles } from "lucide-react";
+import { ArrowRight, Calendar, MapPin, Sparkles } from "lucide-react";
+import { listUpcomingPublicHangouts } from "@/lib/hangouts.functions";
+import { categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 
 const BUCKET_CATEGORY = "ned's bucket list item";
 
@@ -20,11 +23,14 @@ export const Route = createFileRoute("/")({
 
 function Landing() {
   const [bucketVenues, setBucketVenues] = useState<Venue[]>([]);
+  const [upcoming, setUpcoming] = useState<any[]>([]);
+  const fetchUpcoming = useServerFn(listUpcomingPublicHangouts);
   useEffect(() => {
     supabase.from("venues").select("*").eq("category", BUCKET_CATEGORY).then(({ data }) => {
       setBucketVenues((data ?? []) as Venue[]);
     });
-  }, []);
+    fetchUpcoming().then((r) => setUpcoming(r.hangouts ?? []));
+  }, [fetchUpcoming]);
   return (
     <div className="min-h-screen bg-background">
       {/* nav */}
