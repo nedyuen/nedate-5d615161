@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import nedHero from "@/assets/ned-hero.jpg.asset.json";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowRight, Calendar, MapPin, Sparkles } from "lucide-react";
+import { ArrowRight, Clock, MapPin, Sparkles } from "lucide-react";
 import { listUpcomingPublicHangouts } from "@/lib/hangouts.functions";
 import { categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 
@@ -94,6 +94,48 @@ function Landing() {
           </div>
         </div>
       </section>
+
+      {/* upcoming hangouts */}
+      {upcoming.length > 0 && (
+        <section className="px-5 pb-16 sm:px-10">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-8">
+              <h2 className="font-display text-3xl text-primary sm:text-4xl">Upcoming hangouts</h2>
+              <p className="mt-2 text-muted-foreground">Public plans on the calendar. Ask to join one.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {upcoming.map((h) => {
+                const meta = categoryMeta(h.category);
+                const v = venueDisplay(h);
+                return (
+                  <Link
+                    key={h.id}
+                    to="/join/$slug"
+                    params={{ slug: h.slug }}
+                    className="group relative overflow-hidden rounded-3xl bg-card shadow-soft hover:shadow-warm transition border border-border/50"
+                  >
+                    {v.imageUrl && (
+                      <img src={v.imageUrl} alt={v.name} className="aspect-[16/10] w-full object-cover group-hover:scale-[1.02] transition" loading="lazy" />
+                    )}
+                    <div className="p-5">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">{meta.emoji} {meta.label}</div>
+                      <div className="mt-1 font-display text-xl text-primary">{h.title ?? "A hangout with Ned"}</div>
+                      {h.pitch && <div className="mt-1 text-sm text-muted-foreground line-clamp-2">{h.pitch}</div>}
+                      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1.5"><Clock className="size-3.5" /> {fmtRange(h.start_time)}</div>
+                        <div className="flex items-center gap-1.5"><MapPin className="size-3.5" /> {v.name}{v.location ? ` · ${v.location}` : ""}</div>
+                      </div>
+                      <div className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+                        Ask to join <ArrowRight className="size-4 group-hover:translate-x-0.5 transition" />
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ideas */}
       <section id="ideas" className="px-5 pb-24 sm:px-10">
