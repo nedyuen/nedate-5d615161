@@ -340,6 +340,7 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
 
 function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const create = useServerFn(createHangout);
+  const fetchVenues = useServerFn(adminListVenues);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
   const [category, setCategory] = useState<string>(CATEGORIES[0].id);
   const [title, setTitle] = useState("");
@@ -355,8 +356,11 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    supabase.from("venues").select("*").eq("category", category).then(({ data }) => setVenues((data ?? []) as Venue[]));
-  }, [category]);
+    fetchVenues({ data: { adminPassword: ADMIN_PASSWORD } }).then((r) => {
+      setVenues(((r.venues ?? []) as Venue[]).filter((v) => v.category === category));
+    });
+  }, [category, fetchVenues]);
+
 
   function addInvitee() { setInvitees(v => [...v, { name: "", email: "" }]); }
   function removeInvitee(i: number) { setInvitees(v => v.filter((_, ix) => ix !== i)); }
