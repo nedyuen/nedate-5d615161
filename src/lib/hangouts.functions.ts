@@ -374,3 +374,228 @@ export const listHangoutsForAdmin = createServerFn({ method: "GET" }).handler(as
 function getOrigin() {
   return process.env.SITE_URL ?? "https://nedate.lovable.app";
 }
+
+// --- public venues listing (replaces direct anon SELECTs in the future if needed) ---
+export const listVenuesByCategory = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) =>
+    z.object({ category: z.string().min(1).max(100) }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows } = await supabaseAdmin
+      .from("venues")
+      .select("id, name, description, location, image_url, category")
+      .eq("category", data.category)
+      .order("name");
+    return { venues: rows ?? [] };
+  });
+
+// --- friend-initiated request submission ---
+export const submitFriendRequest = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        category: z.string().min(1).max(100),
+        name: z.string().trim().min(2).max(200),
+        email: z.string().trim().email().max(255),
+        pitch: z.string().trim().min(1).max(4000),
+        start_time: z.string().min(1),
+        venue_id: z.string().uuid().nullable(),
+        custom_venue_name: z.string().trim().max(300).nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    if (!data.venue_id && (!data.custom_venue_name || data.custom_venue_name.length < 3)) {
+      return { ok: false as const, error: "venue_required" as const };
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const startIso = new Date(data.start_time).toISOString();
+    const { data: inserted, error } = await supabaseAdmin
+      .from("requests")
+      .insert({
+        hangout_kind: "friend_request",
+        initiator: "friend",
+        visibility: "private",
+        hangout_status: "active",
+        request_status: "pending",
+        category: data.category,
+        requester_name: data.name,
+        requester_email: data.email,
+        pitch: data.pitch,
+        start_time: startIso,
+        end_time: null,
+        venue_id: data.venue_id,
+        custom_venue_name: data.venue_id ? null : data.custom_venue_name,
+      })
+      .select("slug")
+      .single();
+    if (error || !inserted) {
+      console.error("[hangouts] submitFriendRequest", error);
+      return { ok: false as const, error: "insert_failed" as const };
+    }
+
+    // Fetch venue info for the email
+    let venueText = data.custom_venue_name ?? "TBD";
+    if (data.venue_id) {
+      const { data: v } = await supabaseAdmin
+        .from("venues")
+        .select("name, location")
+        .eq("id", data.venue_id)
+        .maybeSingle();
+      if (v) venueText = v.name + (v.location ? ` · ${v.location}` : "");
+    }
+    try {
+      await sendRequestConfirmation({
+        data: {
+          to: data.email,
+          name: data.name,
+          pitch: data.pitch,
+          venue: venueText,
+          when: fmtRangeServer(startIso),
+          trackingUrl: `${getOrigin()}/r/${inserted.slug}`,
+        },
+      });
+    } catch (e) {
+      console.error("[hangouts] confirmation email", e);
+    }
+    return { ok: true as const, slug: inserted.slug };
+  });
+
+// --- requester tracking lookup (NO requester_email returned) ---
+export const getRequestTracking = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().regex(SLUG_RE) }).parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row, error } = await supabaseAdmin
+      .from("requests")
+      .select(
+        "id, slug, category, requester_name, pitch, start_time, end_time, request_status, hangout_kind, admin_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, parent_hangout_id, request_message, venue:venues(name, location, image_url)",
+      )
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (error) {
+      console.error("[hangouts] getRequestTracking", error);
+      return { request: null };
+    }
+    return { request: row };
+  });
+
+// --- admin: list venues ---
+export const adminListVenues = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ adminPassword: z.string().min(1).max(200) }).parse(d))
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows } = await supabaseAdmin
+      .from("venues")
+      .select("*")
+      .order("category")
+      .order("name");
+    return { venues: rows ?? [] };
+  });
+
+// --- admin: add venue ---
+export const adminAddVenue = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        adminPassword: z.string().min(1).max(200),
+        category: z.string().min(1).max(100),
+        name: z.string().trim().min(1).max(300),
+        description: z.string().trim().max(2000).optional().nullable(),
+        location: z.string().trim().max(500).optional().nullable(),
+        image_url: z.string().trim().max(2000).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("venues").insert({
+      category: data.category,
+      name: data.name,
+      description: data.description || null,
+      location: data.location || null,
+      image_url: data.image_url || null,
+    });
+    if (error) {
+      console.error("[hangouts] adminAddVenue", error);
+      return { ok: false as const };
+    }
+    return { ok: true as const };
+  });
+
+// --- admin: delete venue ---
+export const adminDeleteVenue = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ adminPassword: z.string().min(1).max(200), id: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("venues").delete().eq("id", data.id);
+    if (error) {
+      console.error("[hangouts] adminDeleteVenue", error);
+      return { ok: false as const };
+    }
+    return { ok: true as const };
+  });
+
+// --- admin: update a friend request (approve/reject + comment) ---
+export const adminUpdateRequestStatus = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        adminPassword: z.string().min(1).max(200),
+        requestId: z.string().uuid(),
+        status: z.enum(["approved", "rejected"]),
+        comment: z.string().trim().max(4000).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const trimmed = data.comment?.trim() || null;
+
+    const { data: updated, error } = await supabaseAdmin
+      .from("requests")
+      .update({
+        request_status: data.status,
+        admin_comment: trimmed,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", data.requestId)
+      .select(
+        "slug, requester_name, requester_email, start_time, end_time, custom_venue_name, custom_venue_location, venue:venues(name, location)",
+      )
+      .maybeSingle();
+    if (error || !updated) {
+      console.error("[hangouts] adminUpdateRequestStatus", error);
+      return { ok: false as const };
+    }
+    const v: any = updated.venue;
+    const venueName = v?.name ?? updated.custom_venue_name ?? "TBD";
+    const venueLoc = v?.location ?? updated.custom_venue_location ?? null;
+    const venueText = venueName + (venueLoc ? ` · ${venueLoc}` : "");
+    try {
+      if (updated.requester_email && updated.requester_name) {
+        await sendRequestUpdate({
+          data: {
+            to: updated.requester_email,
+            name: updated.requester_name,
+            status: data.status,
+            comment: trimmed,
+            venue: venueText,
+            when: fmtRangeServer(updated.start_time),
+            trackingUrl: `${getOrigin()}/r/${updated.slug}`,
+          },
+        });
+      }
+    } catch (e) {
+      console.error("[hangouts] sendRequestUpdate", e);
+    }
+    return { ok: true as const };
+  });
+
