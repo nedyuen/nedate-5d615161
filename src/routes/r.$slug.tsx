@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import { getRequestTracking } from "@/lib/hangouts.functions";
 import { categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 import { Check, Clock, MapPin, X, Copy } from "lucide-react";
 import { toast } from "sonner";
@@ -21,20 +22,16 @@ type Req = {
 
 function StatusPage() {
   const { slug } = Route.useParams();
+  const fetchTracking = useServerFn(getRequestTracking);
   const [req, setReq] = useState<Req | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase
-      .from("requests")
-      .select("*, venue:venues(name, location, image_url)")
-      .eq("slug", slug)
-      .maybeSingle()
-      .then(({ data }) => {
-        setReq((data as any) ?? null);
-        setLoading(false);
-      });
-  }, [slug]);
+    fetchTracking({ data: { slug } }).then((r) => {
+      setReq((r.request as any) ?? null);
+      setLoading(false);
+    });
+  }, [fetchTracking, slug]);
 
   if (loading) return <div className="min-h-screen grid place-items-center text-muted-foreground">Loading…</div>;
   if (!req) return (
