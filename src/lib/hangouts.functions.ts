@@ -2,9 +2,18 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
   sendRequestConfirmation,
+  sendRequestUpdate,
   sendInvitation,
   sendInviteeResponseToNed,
 } from "./email.functions";
+
+// Admin password verified server-side. Mirrors client constant but the
+// authoritative check happens here before any privileged DB operation.
+const ADMIN_PASSWORD_SERVER = process.env.ADMIN_PASSWORD ?? "nedate2026";
+function assertAdmin(pw: string) {
+  if (!pw || pw !== ADMIN_PASSWORD_SERVER) throw new Error("Unauthorized");
+}
+
 
 // --- helpers ---
 const SLUG_RE = /^[a-z0-9]{8,32}$/i;
