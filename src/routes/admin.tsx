@@ -274,34 +274,25 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
   const [comment, setComment] = useState(req.admin_comment ?? "");
   const [saving, setSaving] = useState<string | null>(null);
   const v = venueDisplay(req);
+  const updateStatus = useServerFn(adminUpdateRequestStatus);
 
   async function decide(status: "approved" | "rejected") {
     setSaving(status);
     const trimmed = comment.trim() || null;
-    const { error } = await supabase.from("requests").update({ request_status: status, admin_comment: trimmed, updated_at: new Date().toISOString() }).eq("id", req.id);
-    if (error) { setSaving(null); toast.error("Update failed"); return; }
-    const venueText = v.name + (v.location ? ` · ${v.location}` : "");
-    try {
-      if (req.requester_email && req.requester_name) {
-        await sendRequestUpdate({
-          data: {
-            to: req.requester_email,
-            name: req.requester_name,
-            status,
-            comment: trimmed,
-            venue: venueText,
-            when: fmtRange(req.start_time, req.end_time),
-            trackingUrl: `${window.location.origin}/r/${req.slug}`,
-          },
-        });
-      }
-    } catch (e) {
-      console.error("Update email failed", e);
-    }
+    const res = await updateStatus({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        requestId: req.id,
+        status,
+        comment: trimmed,
+      },
+    });
+    if (!res.ok) { setSaving(null); toast.error("Update failed"); return; }
     setSaving(null);
     toast.success(`Marked ${status} · email sent`);
     onUpdated();
   }
+
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
