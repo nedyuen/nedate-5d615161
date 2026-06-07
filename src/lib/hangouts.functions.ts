@@ -372,7 +372,7 @@ export const listHangoutsForAdmin = createServerFn({ method: "GET" }).handler(as
 
 // --- helper ---
 function getOrigin() {
-  return process.env.SITE_URL ?? "https://nedate.lovable.app";
+  return "https://nedate.lovable.app";
 }
 
 // --- public venues listing (replaces direct anon SELECTs in the future if needed) ---
