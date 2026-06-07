@@ -14,56 +14,134 @@ export type Database = {
   }
   public: {
     Tables: {
+      hangout_invitees: {
+        Row: {
+          comment: string | null
+          created_at: string
+          email: string
+          hangout_id: string
+          id: string
+          name: string
+          responded_at: string | null
+          response_status: string
+          slug: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          email: string
+          hangout_id: string
+          id?: string
+          name: string
+          responded_at?: string | null
+          response_status?: string
+          slug?: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          email?: string
+          hangout_id?: string
+          id?: string
+          name?: string
+          responded_at?: string | null
+          response_status?: string
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hangout_invitees_hangout_id_fkey"
+            columns: ["hangout_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       requests: {
         Row: {
           admin_comment: string | null
           category: string
           created_at: string
-          custom_venue: string | null
+          custom_venue_image_url: string | null
+          custom_venue_location: string | null
+          custom_venue_name: string | null
           end_time: string | null
+          hangout_kind: string
+          hangout_status: string
           id: string
-          pitch: string
-          requester_email: string
-          requester_name: string
+          initiator: string
+          parent_hangout_id: string | null
+          pitch: string | null
+          request_message: string | null
+          request_status: string | null
+          requester_email: string | null
+          requester_name: string | null
           slug: string
           start_time: string
-          status: string
+          title: string | null
           updated_at: string
           venue_id: string | null
+          visibility: string
         }
         Insert: {
           admin_comment?: string | null
           category: string
           created_at?: string
-          custom_venue?: string | null
+          custom_venue_image_url?: string | null
+          custom_venue_location?: string | null
+          custom_venue_name?: string | null
           end_time?: string | null
+          hangout_kind?: string
+          hangout_status?: string
           id?: string
-          pitch: string
-          requester_email: string
-          requester_name: string
+          initiator?: string
+          parent_hangout_id?: string | null
+          pitch?: string | null
+          request_message?: string | null
+          request_status?: string | null
+          requester_email?: string | null
+          requester_name?: string | null
           slug?: string
           start_time: string
-          status?: string
+          title?: string | null
           updated_at?: string
           venue_id?: string | null
+          visibility?: string
         }
         Update: {
           admin_comment?: string | null
           category?: string
           created_at?: string
-          custom_venue?: string | null
+          custom_venue_image_url?: string | null
+          custom_venue_location?: string | null
+          custom_venue_name?: string | null
           end_time?: string | null
+          hangout_kind?: string
+          hangout_status?: string
           id?: string
-          pitch?: string
-          requester_email?: string
-          requester_name?: string
+          initiator?: string
+          parent_hangout_id?: string | null
+          pitch?: string | null
+          request_message?: string | null
+          request_status?: string | null
+          requester_email?: string | null
+          requester_name?: string | null
           slug?: string
           start_time?: string
-          status?: string
+          title?: string | null
           updated_at?: string
           venue_id?: string | null
+          visibility?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "requests_parent_hangout_id_fkey"
+            columns: ["parent_hangout_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "requests_venue_id_fkey"
             columns: ["venue_id"]
