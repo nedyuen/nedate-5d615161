@@ -1,12 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_PASSWORD, ADMIN_STORAGE_KEY, CATEGORIES, categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { sendRequestUpdate } from "@/lib/email.functions";
-import { createHangout, listHangoutsForAdmin } from "@/lib/hangouts.functions";
+import {
+  createHangout,
+  listHangoutsForAdmin,
+  adminUpdateRequestStatus,
+  adminListVenues,
+  adminAddVenue,
+  adminDeleteVenue,
+} from "@/lib/hangouts.functions";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — Nedate" }] }),
