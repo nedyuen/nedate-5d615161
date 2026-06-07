@@ -13,6 +13,8 @@ import { Route as RequestRouteImport } from './routes/request'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RSlugRouteImport } from './routes/r.$slug'
+import { Route as JoinSlugRouteImport } from './routes/join.$slug'
+import { Route as ISlugRouteImport } from './routes/i.$slug'
 
 const RequestRoute = RequestRouteImport.update({
   id: '/request',
@@ -34,17 +36,31 @@ const RSlugRoute = RSlugRouteImport.update({
   path: '/r/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const JoinSlugRoute = JoinSlugRouteImport.update({
+  id: '/join/$slug',
+  path: '/join/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ISlugRoute = ISlugRouteImport.update({
+  id: '/i/$slug',
+  path: '/i/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/request': typeof RequestRoute
+  '/i/$slug': typeof ISlugRoute
+  '/join/$slug': typeof JoinSlugRoute
   '/r/$slug': typeof RSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/request': typeof RequestRoute
+  '/i/$slug': typeof ISlugRoute
+  '/join/$slug': typeof JoinSlugRoute
   '/r/$slug': typeof RSlugRoute
 }
 export interface FileRoutesById {
@@ -52,20 +68,37 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/request': typeof RequestRoute
+  '/i/$slug': typeof ISlugRoute
+  '/join/$slug': typeof JoinSlugRoute
   '/r/$slug': typeof RSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/request' | '/r/$slug'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/request'
+    | '/i/$slug'
+    | '/join/$slug'
+    | '/r/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/request' | '/r/$slug'
-  id: '__root__' | '/' | '/admin' | '/request' | '/r/$slug'
+  to: '/' | '/admin' | '/request' | '/i/$slug' | '/join/$slug' | '/r/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/request'
+    | '/i/$slug'
+    | '/join/$slug'
+    | '/r/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   RequestRoute: typeof RequestRoute
+  ISlugRoute: typeof ISlugRoute
+  JoinSlugRoute: typeof JoinSlugRoute
   RSlugRoute: typeof RSlugRoute
 }
 
@@ -99,6 +132,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/join/$slug': {
+      id: '/join/$slug'
+      path: '/join/$slug'
+      fullPath: '/join/$slug'
+      preLoaderRoute: typeof JoinSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/i/$slug': {
+      id: '/i/$slug'
+      path: '/i/$slug'
+      fullPath: '/i/$slug'
+      preLoaderRoute: typeof ISlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,8 +153,20 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   RequestRoute: RequestRoute,
+  ISlugRoute: ISlugRoute,
+  JoinSlugRoute: JoinSlugRoute,
   RSlugRoute: RSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

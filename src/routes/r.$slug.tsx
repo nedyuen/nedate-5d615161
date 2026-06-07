@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { categoryMeta, fmtRange } from "@/lib/nedate";
+import { categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 import { Check, Clock, MapPin, X, Copy } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,9 +11,11 @@ export const Route = createFileRoute("/r/$slug")({
 });
 
 type Req = {
-  id: string; slug: string; category: string; requester_name: string; pitch: string;
-  start_time: string; end_time: string | null; status: string; admin_comment: string | null;
-  custom_venue: string | null;
+  id: string; slug: string; category: string; requester_name: string | null; pitch: string | null;
+  start_time: string; end_time: string | null; request_status: string | null;
+  hangout_kind: string; admin_comment: string | null;
+  custom_venue_name: string | null; custom_venue_location: string | null; custom_venue_image_url: string | null;
+  parent_hangout_id: string | null; request_message: string | null;
   venue: { name: string; location: string | null; image_url: string | null } | null;
 };
 
@@ -23,8 +25,15 @@ function StatusPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from("requests").select("*, venue:venues(name, location, image_url)").eq("slug", slug).maybeSingle()
-      .then(({ data }) => { setReq(data as Req | null); setLoading(false); });
+    supabase
+      .from("requests")
+      .select("*, venue:venues(name, location, image_url)")
+      .eq("slug", slug)
+      .maybeSingle()
+      .then(({ data }) => {
+        setReq((data as any) ?? null);
+        setLoading(false);
+      });
   }, [slug]);
 
   if (loading) return <div className="min-h-screen grid place-items-center text-muted-foreground">Loading…</div>;
@@ -38,8 +47,8 @@ function StatusPage() {
   );
 
   const meta = categoryMeta(req.category);
-  const status = req.status;
-  const venueName = req.venue?.name ?? req.custom_venue ?? "TBD";
+  const status = req.request_status ?? "pending";
+  const v = venueDisplay(req);
 
   return (
     <div className="min-h-screen bg-background">
@@ -78,16 +87,16 @@ function StatusPage() {
           )}
 
           <div className="mt-8 rounded-3xl bg-card border border-border/60 shadow-soft overflow-hidden">
-            {req.venue?.image_url && (
-              <img src={req.venue.image_url} alt={venueName} className="aspect-[2/1] w-full object-cover" />
+            {v.imageUrl && (
+              <img src={v.imageUrl} alt={v.name} className="aspect-[2/1] w-full object-cover" />
             )}
             <div className="p-6 space-y-4">
               <div>
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">{meta.emoji} {meta.label}</div>
-                <div className="mt-1 font-display text-2xl text-primary">{venueName}</div>
-                {req.venue?.location && (
+                <div className="mt-1 font-display text-2xl text-primary">{v.name}</div>
+                {v.location && (
                   <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <MapPin className="size-4" /> {req.venue.location}
+                    <MapPin className="size-4" /> {v.location}
                   </div>
                 )}
               </div>
@@ -95,10 +104,12 @@ function StatusPage() {
                 <Clock className="size-4 mt-0.5 text-primary" />
                 <span>{fmtRange(req.start_time, req.end_time)}</span>
               </div>
-              <div className="pt-4 border-t border-border/60">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">From {req.requester_name}</div>
-                <p className="text-foreground italic">"{req.pitch}"</p>
-              </div>
+              {(req.pitch || req.request_message) && (
+                <div className="pt-4 border-t border-border/60">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">From {req.requester_name ?? "you"}</div>
+                  <p className="text-foreground italic">"{req.request_message ?? req.pitch}"</p>
+                </div>
+              )}
             </div>
           </div>
 
