@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import nedHero from "@/assets/ned-hero.jpg.asset.json";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowRight, Calendar, MapPin, Sparkles } from "lucide-react";
+import { ArrowRight, Clock, MapPin, Sparkles } from "lucide-react";
 import { listUpcomingPublicHangouts } from "@/lib/hangouts.functions";
 import { categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 
