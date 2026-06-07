@@ -512,10 +512,13 @@ function VenuesTab() {
   const [cat, setCat] = useState<string>(CATEGORIES[0].id);
   const [form, setForm] = useState({ name: "", description: "", location: "", image_url: "" });
   const [saving, setSaving] = useState(false);
+  const listVenues = useServerFn(adminListVenues);
+  const addVenue = useServerFn(adminAddVenue);
+  const deleteVenue = useServerFn(adminDeleteVenue);
 
   async function load() {
-    const { data } = await supabase.from("venues").select("*").order("category").order("name");
-    setVenues((data ?? []) as Venue[]);
+    const r = await listVenues({ data: { adminPassword: ADMIN_PASSWORD } });
+    setVenues((r.venues ?? []) as Venue[]);
   }
   useEffect(() => { load(); }, []);
 
@@ -523,9 +526,18 @@ function VenuesTab() {
     e.preventDefault();
     if (!form.name.trim()) return;
     setSaving(true);
-    const { error } = await supabase.from("venues").insert({ category: cat, ...form, description: form.description || null, location: form.location || null, image_url: form.image_url || null });
+    const res = await addVenue({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        category: cat,
+        name: form.name,
+        description: form.description || null,
+        location: form.location || null,
+        image_url: form.image_url || null,
+      },
+    });
     setSaving(false);
-    if (error) { toast.error("Couldn't add"); return; }
+    if (!res.ok) { toast.error("Couldn't add"); return; }
     setForm({ name: "", description: "", location: "", image_url: "" });
     toast.success("Added");
     load();
@@ -533,9 +545,10 @@ function VenuesTab() {
 
   async function del(id: string) {
     if (!confirm("Remove this venue?")) return;
-    await supabase.from("venues").delete().eq("id", id);
+    await deleteVenue({ data: { adminPassword: ADMIN_PASSWORD, id } });
     load();
   }
+
 
   const byCat = CATEGORIES.map(c => ({ ...c, items: venues.filter(v => v.category === c.id) }));
 
