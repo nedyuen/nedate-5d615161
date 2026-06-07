@@ -322,16 +322,14 @@ export const createHangout = createServerFn({ method: "POST" })
         const venueText = v.name + (v.location ? ` · ${v.location}` : "");
         await Promise.allSettled(
           invitees.map((inv) =>
-            sendInvitation({
-              data: {
-                to: inv.email,
-                name: inv.name,
-                hangoutTitle: hangout.title ?? "A hangout with Ned",
-                pitch: hangout.pitch ?? null,
-                venue: venueText,
-                when: fmtRangeServer(hangout.start_time),
-                inviteUrl: `${getOrigin()}/i/${inv.slug}`,
-              },
+            sendInvitationEmail({
+              to: inv.email,
+              name: inv.name,
+              hangoutTitle: hangout.title ?? "A hangout with Ned",
+              pitch: hangout.pitch ?? null,
+              venue: venueText,
+              when: fmtRangeServer(hangout.start_time),
+              inviteUrl: `${getOrigin()}/i/${inv.slug}`,
             }),
           ),
         );
@@ -442,15 +440,13 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
       if (v) venueText = v.name + (v.location ? ` · ${v.location}` : "");
     }
     try {
-      await sendRequestConfirmation({
-        data: {
-          to: data.email,
-          name: data.name,
-          pitch: data.pitch,
-          venue: venueText,
-          when: fmtRangeServer(startIso),
-          trackingUrl: `${getOrigin()}/r/${inserted.slug}`,
-        },
+      await sendRequestConfirmationEmail({
+        to: data.email,
+        name: data.name,
+        pitch: data.pitch,
+        venue: venueText,
+        when: fmtRangeServer(startIso),
+        trackingUrl: `${getOrigin()}/r/${inserted.slug}`,
       });
     } catch (e) {
       console.error("[hangouts] confirmation email", e);
@@ -577,16 +573,14 @@ export const adminUpdateRequestStatus = createServerFn({ method: "POST" })
     const venueText = venueName + (venueLoc ? ` · ${venueLoc}` : "");
     try {
       if (updated.requester_email && updated.requester_name) {
-        await sendRequestUpdate({
-          data: {
-            to: updated.requester_email,
-            name: updated.requester_name,
-            status: data.status,
-            comment: trimmed,
-            venue: venueText,
-            when: fmtRangeServer(updated.start_time),
-            trackingUrl: `${getOrigin()}/r/${updated.slug}`,
-          },
+        await sendRequestUpdateEmail({
+          to: updated.requester_email,
+          name: updated.requester_name,
+          status: data.status,
+          comment: trimmed,
+          venue: venueText,
+          when: fmtRangeServer(updated.start_time),
+          trackingUrl: `${getOrigin()}/r/${updated.slug}`,
         });
       }
     } catch (e) {
