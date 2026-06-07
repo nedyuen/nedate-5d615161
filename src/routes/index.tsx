@@ -143,7 +143,7 @@ function Landing() {
           <div className="flex items-end justify-between gap-4 mb-8">
             <div>
               <h2 className="font-display text-3xl text-primary sm:text-4xl">Ned's Bucket List</h2>
-              <p className="mt-2 text-muted-foreground">Help me cross something off the list. Pick one and we'll plan it.</p>
+              <p className="mt-2 text-muted-foreground">Want to invite me to hang, but not sure what to do? Why not help me cross something off my bucket list.</p>
             </div>
           </div>
 
