@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
-  sendRequestConfirmation,
-  sendRequestUpdate,
-  sendInvitation,
-  sendInviteeResponseToNed,
-} from "./email.functions";
+  sendInvitationEmail,
+  sendInviteeResponseToNedEmail,
+  sendRequestConfirmationEmail,
+  sendRequestUpdateEmail,
+} from "./email.server";
 
 // Admin password verified server-side. Mirrors client constant but the
 // authoritative check happens here before any privileged DB operation.
@@ -157,15 +157,13 @@ export const submitJoinRequest = createServerFn({ method: "POST" })
     const v = venueDisplayServer(parent as any);
     const venueText = v.name + (v.location ? ` · ${v.location}` : "");
     try {
-      await sendRequestConfirmation({
-        data: {
-          to: data.email,
-          name: data.name,
-          pitch: data.message?.trim() || `Joining: ${parent.title ?? parent.pitch ?? "Ned's hangout"}`,
-          venue: venueText,
-          when: fmtRangeServer(parent.start_time),
-          trackingUrl: `${getOrigin()}/r/${inserted.slug}`,
-        },
+      await sendRequestConfirmationEmail({
+        to: data.email,
+        name: data.name,
+        pitch: data.message?.trim() || `Joining: ${parent.title ?? parent.pitch ?? "Ned's hangout"}`,
+        venue: venueText,
+        when: fmtRangeServer(parent.start_time),
+        trackingUrl: `${getOrigin()}/r/${inserted.slug}`,
       });
     } catch (e) {
       console.error("[hangouts] confirmation email", e);
@@ -227,14 +225,12 @@ export const respondToInvite = createServerFn({ method: "POST" })
       .maybeSingle();
 
     try {
-      await sendInviteeResponseToNed({
-        data: {
-          inviteeName: invite.name,
-          inviteeEmail: invite.email,
-          response: data.response,
-          comment: data.comment ?? null,
-          hangoutTitle: hangout?.title ?? hangout?.pitch ?? "Hangout",
-        },
+      await sendInviteeResponseToNedEmail({
+        inviteeName: invite.name,
+        inviteeEmail: invite.email,
+        response: data.response,
+        comment: data.comment ?? null,
+        hangoutTitle: hangout?.title ?? hangout?.pitch ?? "Hangout",
       });
     } catch (e) {
       console.error("[hangouts] notify ned", e);
