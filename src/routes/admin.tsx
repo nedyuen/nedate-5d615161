@@ -1,12 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_PASSWORD, ADMIN_STORAGE_KEY, CATEGORIES, categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { sendRequestUpdate } from "@/lib/email.functions";
-import { createHangout, listHangoutsForAdmin } from "@/lib/hangouts.functions";
+import {
+  createHangout,
+  listHangoutsForAdmin,
+  adminUpdateRequestStatus,
+  adminListVenues,
+  adminAddVenue,
+  adminDeleteVenue,
+} from "@/lib/hangouts.functions";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — Nedate" }] }),
@@ -268,34 +274,25 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
   const [comment, setComment] = useState(req.admin_comment ?? "");
   const [saving, setSaving] = useState<string | null>(null);
   const v = venueDisplay(req);
+  const updateStatus = useServerFn(adminUpdateRequestStatus);
 
   async function decide(status: "approved" | "rejected") {
     setSaving(status);
     const trimmed = comment.trim() || null;
-    const { error } = await supabase.from("requests").update({ request_status: status, admin_comment: trimmed, updated_at: new Date().toISOString() }).eq("id", req.id);
-    if (error) { setSaving(null); toast.error("Update failed"); return; }
-    const venueText = v.name + (v.location ? ` · ${v.location}` : "");
-    try {
-      if (req.requester_email && req.requester_name) {
-        await sendRequestUpdate({
-          data: {
-            to: req.requester_email,
-            name: req.requester_name,
-            status,
-            comment: trimmed,
-            venue: venueText,
-            when: fmtRange(req.start_time, req.end_time),
-            trackingUrl: `${window.location.origin}/r/${req.slug}`,
-          },
-        });
-      }
-    } catch (e) {
-      console.error("Update email failed", e);
-    }
+    const res = await updateStatus({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        requestId: req.id,
+        status,
+        comment: trimmed,
+      },
+    });
+    if (!res.ok) { setSaving(null); toast.error("Update failed"); return; }
     setSaving(null);
     toast.success(`Marked ${status} · email sent`);
     onUpdated();
   }
+
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
@@ -343,6 +340,7 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
 
 function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const create = useServerFn(createHangout);
+  const fetchVenues = useServerFn(adminListVenues);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
   const [category, setCategory] = useState<string>(CATEGORIES[0].id);
   const [title, setTitle] = useState("");
@@ -358,8 +356,11 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    supabase.from("venues").select("*").eq("category", category).then(({ data }) => setVenues((data ?? []) as Venue[]));
-  }, [category]);
+    fetchVenues({ data: { adminPassword: ADMIN_PASSWORD } }).then((r) => {
+      setVenues(((r.venues ?? []) as Venue[]).filter((v) => v.category === category));
+    });
+  }, [category, fetchVenues]);
+
 
   function addInvitee() { setInvitees(v => [...v, { name: "", email: "" }]); }
   function removeInvitee(i: number) { setInvitees(v => v.filter((_, ix) => ix !== i)); }
@@ -511,10 +512,13 @@ function VenuesTab() {
   const [cat, setCat] = useState<string>(CATEGORIES[0].id);
   const [form, setForm] = useState({ name: "", description: "", location: "", image_url: "" });
   const [saving, setSaving] = useState(false);
+  const listVenues = useServerFn(adminListVenues);
+  const addVenue = useServerFn(adminAddVenue);
+  const deleteVenue = useServerFn(adminDeleteVenue);
 
   async function load() {
-    const { data } = await supabase.from("venues").select("*").order("category").order("name");
-    setVenues((data ?? []) as Venue[]);
+    const r = await listVenues({ data: { adminPassword: ADMIN_PASSWORD } });
+    setVenues((r.venues ?? []) as Venue[]);
   }
   useEffect(() => { load(); }, []);
 
@@ -522,9 +526,18 @@ function VenuesTab() {
     e.preventDefault();
     if (!form.name.trim()) return;
     setSaving(true);
-    const { error } = await supabase.from("venues").insert({ category: cat, ...form, description: form.description || null, location: form.location || null, image_url: form.image_url || null });
+    const res = await addVenue({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        category: cat,
+        name: form.name,
+        description: form.description || null,
+        location: form.location || null,
+        image_url: form.image_url || null,
+      },
+    });
     setSaving(false);
-    if (error) { toast.error("Couldn't add"); return; }
+    if (!res.ok) { toast.error("Couldn't add"); return; }
     setForm({ name: "", description: "", location: "", image_url: "" });
     toast.success("Added");
     load();
@@ -532,9 +545,10 @@ function VenuesTab() {
 
   async function del(id: string) {
     if (!confirm("Remove this venue?")) return;
-    await supabase.from("venues").delete().eq("id", id);
+    await deleteVenue({ data: { adminPassword: ADMIN_PASSWORD, id } });
     load();
   }
+
 
   const byCat = CATEGORIES.map(c => ({ ...c, items: venues.filter(v => v.category === c.id) }));
 

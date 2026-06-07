@@ -1,12 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, categoryMeta, type CategoryId } from "@/lib/nedate";
 import { ArrowLeft, ArrowRight, Check, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
-import { sendRequestConfirmation } from "@/lib/email.functions";
-import { fmtRange } from "@/lib/nedate";
+import { listVenuesByCategory, submitFriendRequest } from "@/lib/hangouts.functions";
+
 
 const searchSchema = z.object({ cat: z.string().optional(), venue: z.string().optional() });
 
@@ -34,12 +34,15 @@ function RequestPage() {
   const [submitting, setSubmitting] = useState(false);
   const totalSteps = venuePreset ? 3 : 4;
 
+  const fetchVenues = useServerFn(listVenuesByCategory);
+  const submitReq = useServerFn(submitFriendRequest);
+
   useEffect(() => {
     if (!category) return;
-    supabase.from("venues").select("*").eq("category", category).then(({ data }) => {
-      setVenues((data ?? []) as Venue[]);
+    fetchVenues({ data: { category } }).then((r) => {
+      setVenues((r.venues ?? []) as Venue[]);
     });
-  }, [category]);
+  }, [category, fetchVenues]);
 
   const canNext = () => {
     if (step === 1) return !!category;
@@ -54,39 +57,25 @@ function RequestPage() {
       return;
     }
     setSubmitting(true);
-    const startIso = new Date(start).toISOString();
-    const { data, error } = await supabase.from("requests").insert({
-      hangout_kind: "friend_request",
-      initiator: "friend",
-      visibility: "private",
-      hangout_status: "active",
-      request_status: "pending",
-      category, requester_name: name, requester_email: email, pitch,
-      start_time: startIso, end_time: null,
-      venue_id: venueId, custom_venue_name: venueId ? null : customVenue.trim(),
-    }).select("slug").single();
-    if (error || !data) { setSubmitting(false); toast.error("Couldn't send your request"); return; }
-    const chosenVenue = venues.find((v) => v.id === venueId);
-    const venueText = chosenVenue
-      ? chosenVenue.name + (chosenVenue.location ? ` · ${chosenVenue.location}` : "")
-      : customVenue.trim();
-    try {
-      await sendRequestConfirmation({
-        data: {
-          to: email,
-          name,
-          pitch,
-          venue: venueText,
-          when: fmtRange(startIso),
-          trackingUrl: `${window.location.origin}/r/${data.slug}`,
-        },
-      });
-    } catch (e) {
-      console.error("Confirmation email failed", e);
-    }
+    const res = await submitReq({
+      data: {
+        category,
+        name,
+        email,
+        pitch,
+        start_time: start,
+        venue_id: venueId,
+        custom_venue_name: venueId ? null : customVenue.trim(),
+      },
+    });
     setSubmitting(false);
-    navigate({ to: "/r/$slug", params: { slug: data.slug } });
+    if (!res.ok || !res.slug) {
+      toast.error("Couldn't send your request");
+      return;
+    }
+    navigate({ to: "/r/$slug", params: { slug: res.slug } });
   }
+
 
   return (
     <div className="min-h-screen bg-background">
