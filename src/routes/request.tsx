@@ -56,9 +56,14 @@ function RequestPage() {
     setSubmitting(true);
     const startIso = new Date(start).toISOString();
     const { data, error } = await supabase.from("requests").insert({
+      hangout_kind: "friend_request",
+      initiator: "friend",
+      visibility: "private",
+      hangout_status: "active",
+      request_status: "pending",
       category, requester_name: name, requester_email: email, pitch,
       start_time: startIso, end_time: null,
-      venue_id: venueId, custom_venue: venueId ? null : customVenue.trim(),
+      venue_id: venueId, custom_venue_name: venueId ? null : customVenue.trim(),
     }).select("slug").single();
     if (error || !data) { setSubmitting(false); toast.error("Couldn't send your request"); return; }
     const chosenVenue = venues.find((v) => v.id === venueId);
