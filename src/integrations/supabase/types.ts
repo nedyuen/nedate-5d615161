@@ -14,6 +14,70 @@ export type Database = {
   }
   public: {
     Tables: {
+      hangout_change_requests: {
+        Row: {
+          created_at: string
+          hangout_id: string
+          id: string
+          new_snapshot: Json
+          old_snapshot: Json
+          proposed_by_participant_id: string
+          proposer_comment: string | null
+          responded_at: string | null
+          responder_comment: string | null
+          responder_participant_id: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          hangout_id: string
+          id?: string
+          new_snapshot?: Json
+          old_snapshot?: Json
+          proposed_by_participant_id: string
+          proposer_comment?: string | null
+          responded_at?: string | null
+          responder_comment?: string | null
+          responder_participant_id?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          hangout_id?: string
+          id?: string
+          new_snapshot?: Json
+          old_snapshot?: Json
+          proposed_by_participant_id?: string
+          proposer_comment?: string | null
+          responded_at?: string | null
+          responder_comment?: string | null
+          responder_participant_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hangout_change_requests_hangout_id_fkey"
+            columns: ["hangout_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hangout_change_requests_proposed_by_participant_id_fkey"
+            columns: ["proposed_by_participant_id"]
+            isOneToOne: false
+            referencedRelation: "hangout_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hangout_change_requests_responder_participant_id_fkey"
+            columns: ["responder_participant_id"]
+            isOneToOne: false
+            referencedRelation: "hangout_participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hangout_invitees: {
         Row: {
           comment: string | null
@@ -51,6 +115,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "hangout_invitees_hangout_id_fkey"
+            columns: ["hangout_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hangout_participants: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          hangout_id: string
+          id: string
+          is_active: boolean
+          needs_reconfirmation: boolean
+          role_source: string
+          slug: string | null
+          source_row_id: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          hangout_id: string
+          id?: string
+          is_active?: boolean
+          needs_reconfirmation?: boolean
+          role_source: string
+          slug?: string | null
+          source_row_id?: string | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          hangout_id?: string
+          id?: string
+          is_active?: boolean
+          needs_reconfirmation?: boolean
+          role_source?: string
+          slug?: string | null
+          source_row_id?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hangout_participants_hangout_id_fkey"
             columns: ["hangout_id"]
             isOneToOne: false
             referencedRelation: "requests"
