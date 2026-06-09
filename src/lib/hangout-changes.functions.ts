@@ -320,13 +320,19 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
       return { ok: false as const, error: "insert_failed" as const };
     }
 
-    // Notify other active participants
-    const { data: others } = await supabaseAdmin
+    // Notify recipients who need to act on this proposal.
+    // - friend_request: everyone else (the counterparty).
+    // - public/private: only Ned, since only Ned can approve.
+    const notifyQuery = supabaseAdmin
       .from("hangout_participants")
       .select("id, type, slug, email, display_name")
       .eq("hangout_id", viewer.hangout_id)
       .eq("is_active", true)
       .neq("id", viewer.id);
+    if (hangout.hangout_kind !== "friend_request") {
+      notifyQuery.eq("type", "ned");
+    }
+    const { data: others } = await notifyQuery;
 
     const diffs = snapshotDiffs(oldSnapshot, newSnapshot, {
       current: (hangout as any).venue ?? null,
