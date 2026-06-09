@@ -149,7 +149,7 @@ export const submitJoinRequest = createServerFn({ method: "POST" })
       .insert(insertPayload)
       .select("slug")
       .single();
-    if (error || !inserted) {
+    if (iErr || !inserted) {
       console.error("[hangouts] submitJoinRequest insert", iErr);
       return { ok: false, error: "insert_failed" as const };
     }
