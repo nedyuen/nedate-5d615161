@@ -383,7 +383,25 @@ export const respondToHangoutChange = createServerFn({ method: "POST" })
     if (!proposal) return { ok: false as const, error: "not_found" as const };
     if (proposal.hangout_id !== viewer.hangout_id) return { ok: false as const, error: "unauthorized" as const };
     if (proposal.status !== "pending") return { ok: false as const, error: "not_pending" as const };
-    if (proposal.proposed_by_participant_id === viewer.id) return { ok: false as const, error: "cannot_self_respond" as const };
+
+    // Approval permissions depend on hangout_kind:
+    // - friend_request: counterparty (anyone who isn't the proposer)
+    // - public / private: only Ned is the final approver
+    const { data: hangoutRow } = await supabaseAdmin
+      .from("requests")
+      .select("hangout_kind")
+      .eq("id", proposal.hangout_id)
+      .maybeSingle();
+    const hangoutKind = hangoutRow?.hangout_kind ?? "friend_request";
+    if (hangoutKind === "friend_request") {
+      if (proposal.proposed_by_participant_id === viewer.id) {
+        return { ok: false as const, error: "cannot_self_respond" as const };
+      }
+    } else {
+      if (viewer.type !== "ned") {
+        return { ok: false as const, error: "ned_only_approver" as const };
+      }
+    }
 
     const trimmedComment = data.comment?.trim() || null;
 
