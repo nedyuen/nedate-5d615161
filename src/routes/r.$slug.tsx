@@ -5,6 +5,7 @@ import { getRequestTracking } from "@/lib/hangouts.functions";
 import { categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 import { Check, Clock, MapPin, X, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { HangoutAgreementPanel } from "@/components/HangoutAgreementPanel";
 
 export const Route = createFileRoute("/r/$slug")({
   head: () => ({ meta: [{ title: "Your request — Nedate" }] }),
