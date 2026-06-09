@@ -12,6 +12,7 @@ import {
   adminAddVenue,
   adminDeleteVenue,
 } from "@/lib/hangouts.functions";
+import { HangoutAgreementPanel } from "@/components/HangoutAgreementPanel";
 
 
 export const Route = createFileRoute("/admin")({
