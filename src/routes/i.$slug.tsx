@@ -5,6 +5,7 @@ import { getInviteByToken, respondToInvite } from "@/lib/hangouts.functions";
 import { categoryMeta, fmtRange, venueDisplay } from "@/lib/nedate";
 import { Check, Clock, HelpCircle, Loader2, MapPin, X } from "lucide-react";
 import { toast } from "sonner";
+import { HangoutAgreementPanel } from "@/components/HangoutAgreementPanel";
 
 export const Route = createFileRoute("/i/$slug")({
   head: () => ({ meta: [{ title: "Your invite — Nedate" }] }),
