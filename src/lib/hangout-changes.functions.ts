@@ -238,7 +238,7 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, title, pitch, start_time, end_time, hangout_status, visibility, category, venue_id, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location)",
+        "id, title, pitch, start_time, end_time, hangout_status, visibility, hangout_kind, category, venue_id, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location)",
       )
       .eq("id", viewer.hangout_id)
       .maybeSingle();
@@ -246,9 +246,7 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     if (hangout.hangout_status === "cancelled" || hangout.hangout_status === "completed") {
       return { ok: false as const, error: "hangout_terminal" as const };
     }
-    if (hangout.visibility === "public" && viewer.type !== "ned") {
-      return { ok: false as const, error: "public_admin_only" as const };
-    }
+    // Any active participant may propose changes in any hangout kind.
 
 
 
@@ -322,13 +320,19 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
       return { ok: false as const, error: "insert_failed" as const };
     }
 
-    // Notify other active participants
-    const { data: others } = await supabaseAdmin
+    // Notify recipients who need to act on this proposal.
+    // - friend_request: everyone else (the counterparty).
+    // - public/private: only Ned, since only Ned can approve.
+    let notifyQuery = supabaseAdmin
       .from("hangout_participants")
       .select("id, type, slug, email, display_name")
       .eq("hangout_id", viewer.hangout_id)
       .eq("is_active", true)
       .neq("id", viewer.id);
+    if (hangout.hangout_kind !== "friend_request") {
+      notifyQuery = notifyQuery.eq("type", "ned");
+    }
+    const { data: others } = await notifyQuery;
 
     const diffs = snapshotDiffs(oldSnapshot, newSnapshot, {
       current: (hangout as any).venue ?? null,
@@ -385,7 +389,25 @@ export const respondToHangoutChange = createServerFn({ method: "POST" })
     if (!proposal) return { ok: false as const, error: "not_found" as const };
     if (proposal.hangout_id !== viewer.hangout_id) return { ok: false as const, error: "unauthorized" as const };
     if (proposal.status !== "pending") return { ok: false as const, error: "not_pending" as const };
-    if (proposal.proposed_by_participant_id === viewer.id) return { ok: false as const, error: "cannot_self_respond" as const };
+
+    // Approval permissions depend on hangout_kind:
+    // - friend_request: counterparty (anyone who isn't the proposer)
+    // - public / private: only Ned is the final approver
+    const { data: hangoutRow } = await supabaseAdmin
+      .from("requests")
+      .select("hangout_kind")
+      .eq("id", proposal.hangout_id)
+      .maybeSingle();
+    const hangoutKind = hangoutRow?.hangout_kind ?? "friend_request";
+    if (hangoutKind === "friend_request") {
+      if (proposal.proposed_by_participant_id === viewer.id) {
+        return { ok: false as const, error: "cannot_self_respond" as const };
+      }
+    } else {
+      if (viewer.type !== "ned") {
+        return { ok: false as const, error: "ned_only_approver" as const };
+      }
+    }
 
     const trimmedComment = data.comment?.trim() || null;
 

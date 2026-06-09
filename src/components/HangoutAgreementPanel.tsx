@@ -44,11 +44,19 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
 
   const { hangout, viewer, pendingProposal, history, participants } = ctx;
   const isProposer = pendingProposal && pendingProposal.proposed_by_participant_id === viewer.id;
-  const canRespond = pendingProposal && !isProposer;
+  const kind = (hangout as any).hangout_kind ?? "friend_request";
+  const isFriendRequest = kind === "friend_request";
+  const nedApprovesOnly = !isFriendRequest;
+  const canRespond = !!pendingProposal && (
+    nedApprovesOnly ? viewer.type === "ned" : !isProposer
+  );
   const v = venueDisplay(hangout as any);
   const terminal = hangout.hangout_status === "cancelled" || hangout.hangout_status === "completed";
-  const isPublic = (hangout as any).visibility === "public";
-  const canPropose = !terminal && !pendingProposal && !(isPublic && viewer.type !== "ned");
+  const canPropose = !terminal && !pendingProposal;
+
+  const subtitle = isFriendRequest
+    ? "changes require the other side to accept"
+    : "any participant can propose · Ned approves";
 
   return (
     <div className="mt-8 rounded-3xl border border-border/60 bg-card shadow-soft overflow-hidden">
@@ -56,7 +64,7 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
         <div>
           <h2 className="font-display text-xl text-primary">The agreement</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {participants.length} participant{participants.length === 1 ? "" : "s"} · {isPublic ? "public hangout — Ned manages details" : "changes require everyone to agree"}
+            {participants.length} participant{participants.length === 1 ? "" : "s"} · {subtitle}
           </p>
         </div>
         {canPropose && (
@@ -81,6 +89,8 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
           proposal={pendingProposal}
           canRespond={!!canRespond}
           isProposer={!!isProposer}
+          nedApprovesOnly={nedApprovesOnly}
+          viewerIsNed={viewer.type === "ned"}
           actor={actor}
           onResolved={reload}
         />
@@ -177,12 +187,16 @@ function PendingProposal({
   proposal,
   canRespond,
   isProposer,
+  nedApprovesOnly,
+  viewerIsNed,
   actor,
   onResolved,
 }: {
   proposal: any;
   canRespond: boolean;
   isProposer: boolean;
+  nedApprovesOnly: boolean;
+  viewerIsNed: boolean;
   actor: Actor;
   onResolved: () => void;
 }) {
@@ -199,10 +213,18 @@ function PendingProposal({
     onResolved();
   }
 
+  const waitingMessage = isProposer
+    ? nedApprovesOnly
+      ? "Waiting for Ned to approve or reject."
+      : "Waiting for the other side to respond."
+    : nedApprovesOnly && !viewerIsNed
+      ? "Only Ned can approve or reject this proposal. You'll get a reconfirmation if the time changes."
+      : "Waiting on response.";
+
   return (
     <div className="mx-6 my-4 rounded-2xl border border-accent/40 bg-accent/10 p-4">
       <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-primary font-medium">
-        <AlertTriangle className="size-3.5" /> Pending proposal from {proposal.proposer?.display_name ?? "someone"}
+        <AlertTriangle className="size-3.5" /> Pending change proposal from {proposal.proposer?.display_name ?? "someone"}
       </div>
       <DiffList oldSnap={proposal.old_snapshot} newSnap={proposal.new_snapshot} />
       {proposal.proposer_comment && (
@@ -210,12 +232,13 @@ function PendingProposal({
       )}
       {canRespond ? (
         <>
+          <div className="mt-3 text-xs font-medium text-primary">Approve or reject this change proposal</div>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             rows={2}
             placeholder="Optional reply"
-            className="mt-3 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary resize-none"
+            className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary resize-none"
           />
           <div className="mt-2 flex gap-2 justify-end">
             <button
@@ -223,21 +246,19 @@ function PendingProposal({
               onClick={() => decide("rejected")}
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50"
             >
-              {busy === "rejected" ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />} Reject
+              {busy === "rejected" ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />} Reject proposal
             </button>
             <button
               disabled={!!busy}
               onClick={() => decide("approved")}
               className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {busy === "approved" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Accept
+              {busy === "approved" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Approve proposal
             </button>
           </div>
         </>
       ) : (
-        <div className="mt-2 text-xs text-muted-foreground">
-          {isProposer ? "Waiting for the other side to respond." : "Waiting on response."}
-        </div>
+        <div className="mt-2 text-xs text-muted-foreground">{waitingMessage}</div>
       )}
     </div>
   );
@@ -257,15 +278,17 @@ function ReconfirmBanner({ actor, onDone }: { actor: Actor; onDone: () => void }
   return (
     <div className="mx-6 my-4 rounded-2xl border border-amber-500/40 bg-amber-50/70 p-4">
       <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-medium text-amber-900">
-        <AlertTriangle className="size-3.5" /> Time changed — please reconfirm
+        <AlertTriangle className="size-3.5" /> Confirm attendance after schedule change
       </div>
-      <p className="mt-1 text-sm text-amber-900/80">Can you still make the new time?</p>
+      <p className="mt-1 text-sm text-amber-900/80">
+        The time changed and has been approved. Are you still able to attend? This updates your attendance only — it doesn't change the hangout.
+      </p>
       <div className="mt-2 flex gap-2">
         <button disabled={!!busy} onClick={() => reply("accepted")} className="rounded-full bg-primary px-4 py-2 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-          {busy === "accepted" ? "…" : "Yes, I'm in"}
+          {busy === "accepted" ? "…" : "Attending"}
         </button>
         <button disabled={!!busy} onClick={() => reply("maybe")} className="rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50">Maybe</button>
-        <button disabled={!!busy} onClick={() => reply("declined")} className="rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50">Can't make it</button>
+        <button disabled={!!busy} onClick={() => reply("declined")} className="rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50">Not attending</button>
       </div>
     </div>
   );
@@ -340,7 +363,7 @@ function ProposeDialog({
           <h3 className="font-display text-xl text-primary">Propose changes</h3>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-muted"><X className="size-4" /></button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">The other side must accept before changes apply.</p>
+        <p className="mt-1 text-xs text-muted-foreground">{current.hangout_kind === "friend_request" ? "The other side must accept before changes apply." : "Ned reviews and approves all change proposals. If the time changes, attendees will be asked to reconfirm attendance."}</p>
 
         <div className="mt-4 grid gap-3 text-sm">
           <label className="grid gap-1">
