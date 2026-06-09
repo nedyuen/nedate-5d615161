@@ -600,12 +600,38 @@ export const adminUpdateRequestStatus = createServerFn({ method: "POST" })
       })
       .eq("id", data.requestId)
       .select(
-        "slug, requester_name, requester_email, start_time, end_time, custom_venue_name, custom_venue_location, venue:venues(name, location)",
+        "id, slug, hangout_kind, parent_hangout_id, requester_name, requester_email, start_time, end_time, custom_venue_name, custom_venue_location, venue:venues(name, location)",
       )
       .maybeSingle();
     if (error || !updated) {
       console.error("[hangouts] adminUpdateRequestStatus", error);
       return { ok: false as const };
+    }
+
+    // Participant lifecycle: on join_request approval, create attendee participant on the PARENT hangout
+    if (
+      data.status === "approved" &&
+      (updated as any).hangout_kind === "join_request" &&
+      (updated as any).parent_hangout_id &&
+      updated.slug &&
+      updated.requester_email
+    ) {
+      const { data: existing } = await supabaseAdmin
+        .from("hangout_participants")
+        .select("id")
+        .eq("slug", updated.slug)
+        .maybeSingle();
+      if (!existing) {
+        await supabaseAdmin.from("hangout_participants").insert({
+          hangout_id: (updated as any).parent_hangout_id,
+          type: "attendee",
+          slug: updated.slug,
+          email: updated.requester_email,
+          display_name: updated.requester_name,
+          role_source: "join_request",
+          source_row_id: (updated as any).id,
+        });
+      }
     }
     const v: any = updated.venue;
     const venueName = v?.name ?? updated.custom_venue_name ?? "TBD";
