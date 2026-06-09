@@ -154,6 +154,7 @@ export const submitJoinRequest = createServerFn({ method: "POST" })
       return { ok: false, error: "insert_failed" as const };
     }
 
+
     const v = venueDisplayServer(parent as any);
     const venueText = v.name + (v.location ? ` · ${v.location}` : "");
     try {
@@ -217,6 +218,13 @@ export const respondToInvite = createServerFn({ method: "POST" })
       .select("id, name, email, hangout_id")
       .maybeSingle();
     if (error || !invite) return { ok: false as const, error: "not_found" as const };
+
+    // Clear reconfirmation flag on the participant row for this invitee slug
+    await supabaseAdmin
+      .from("hangout_participants")
+      .update({ needs_reconfirmation: false })
+      .eq("slug", data.slug);
+
 
     const { data: hangout } = await supabaseAdmin
       .from("requests")
@@ -302,6 +310,14 @@ export const createHangout = createServerFn({ method: "POST" })
       return { ok: false as const, error: "insert_failed" as const };
     }
 
+    // Participant lifecycle: Ned participant
+    await supabaseAdmin.from("hangout_participants").insert({
+      hangout_id: hangout.id,
+      type: "ned",
+      role_source: "ned",
+      display_name: "Ned",
+    });
+
     let invitedCount = 0;
     if (data.invitees.length) {
       const { data: invitees, error: invErr } = await supabaseAdmin
@@ -318,6 +334,18 @@ export const createHangout = createServerFn({ method: "POST" })
         console.error("[hangouts] invitee insert", invErr);
       } else if (invitees) {
         invitedCount = invitees.length;
+        // Participant lifecycle: invitee participants
+        await supabaseAdmin.from("hangout_participants").insert(
+          invitees.map((inv) => ({
+            hangout_id: hangout.id,
+            type: "invitee" as const,
+            slug: inv.slug,
+            email: inv.email,
+            display_name: inv.name,
+            role_source: "invite" as const,
+            source_row_id: inv.id,
+          })),
+        );
         const v = venueDisplayServer(hangout as any);
         const venueText = v.name + (v.location ? ` · ${v.location}` : "");
         await Promise.allSettled(
@@ -422,12 +450,31 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         venue_id: data.venue_id,
         custom_venue_name: data.venue_id ? null : data.custom_venue_name,
       })
-      .select("slug")
+      .select("id, slug")
       .single();
     if (error || !inserted) {
       console.error("[hangouts] submitFriendRequest", error);
       return { ok: false as const, error: "insert_failed" as const };
     }
+
+    // Participant lifecycle: Ned + requester for this hangout-creating flow
+    await supabaseAdmin.from("hangout_participants").insert([
+      {
+        hangout_id: inserted.id,
+        type: "ned",
+        role_source: "ned",
+        display_name: "Ned",
+      },
+      {
+        hangout_id: inserted.id,
+        type: "requester",
+        slug: inserted.slug,
+        email: data.email,
+        display_name: data.name,
+        role_source: "friend_request",
+        source_row_id: inserted.id,
+      },
+    ]);
 
     // Fetch venue info for the email
     let venueText = data.custom_venue_name ?? "TBD";
@@ -560,12 +607,38 @@ export const adminUpdateRequestStatus = createServerFn({ method: "POST" })
       })
       .eq("id", data.requestId)
       .select(
-        "slug, requester_name, requester_email, start_time, end_time, custom_venue_name, custom_venue_location, venue:venues(name, location)",
+        "id, slug, hangout_kind, parent_hangout_id, requester_name, requester_email, start_time, end_time, custom_venue_name, custom_venue_location, venue:venues(name, location)",
       )
       .maybeSingle();
     if (error || !updated) {
       console.error("[hangouts] adminUpdateRequestStatus", error);
       return { ok: false as const };
+    }
+
+    // Participant lifecycle: on join_request approval, create attendee participant on the PARENT hangout
+    if (
+      data.status === "approved" &&
+      (updated as any).hangout_kind === "join_request" &&
+      (updated as any).parent_hangout_id &&
+      updated.slug &&
+      updated.requester_email
+    ) {
+      const { data: existing } = await supabaseAdmin
+        .from("hangout_participants")
+        .select("id")
+        .eq("slug", updated.slug)
+        .maybeSingle();
+      if (!existing) {
+        await supabaseAdmin.from("hangout_participants").insert({
+          hangout_id: (updated as any).parent_hangout_id,
+          type: "attendee",
+          slug: updated.slug,
+          email: updated.requester_email,
+          display_name: updated.requester_name,
+          role_source: "join_request",
+          source_row_id: (updated as any).id,
+        });
+      }
     }
     const v: any = updated.venue;
     const venueName = v?.name ?? updated.custom_venue_name ?? "TBD";
