@@ -44,11 +44,19 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
 
   const { hangout, viewer, pendingProposal, history, participants } = ctx;
   const isProposer = pendingProposal && pendingProposal.proposed_by_participant_id === viewer.id;
-  const canRespond = pendingProposal && !isProposer;
+  const kind = (hangout as any).hangout_kind ?? "friend_request";
+  const isFriendRequest = kind === "friend_request";
+  const nedApprovesOnly = !isFriendRequest;
+  const canRespond = !!pendingProposal && (
+    nedApprovesOnly ? viewer.type === "ned" : !isProposer
+  );
   const v = venueDisplay(hangout as any);
   const terminal = hangout.hangout_status === "cancelled" || hangout.hangout_status === "completed";
-  const isPublic = (hangout as any).visibility === "public";
-  const canPropose = !terminal && !pendingProposal && !(isPublic && viewer.type !== "ned");
+  const canPropose = !terminal && !pendingProposal;
+
+  const subtitle = isFriendRequest
+    ? "changes require the other side to accept"
+    : "any participant can propose · Ned approves";
 
   return (
     <div className="mt-8 rounded-3xl border border-border/60 bg-card shadow-soft overflow-hidden">
@@ -56,7 +64,7 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
         <div>
           <h2 className="font-display text-xl text-primary">The agreement</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {participants.length} participant{participants.length === 1 ? "" : "s"} · {isPublic ? "public hangout — Ned manages details" : "changes require everyone to agree"}
+            {participants.length} participant{participants.length === 1 ? "" : "s"} · {subtitle}
           </p>
         </div>
         {canPropose && (
