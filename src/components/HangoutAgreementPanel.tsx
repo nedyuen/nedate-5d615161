@@ -47,6 +47,8 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
   const canRespond = pendingProposal && !isProposer;
   const v = venueDisplay(hangout as any);
   const terminal = hangout.hangout_status === "cancelled" || hangout.hangout_status === "completed";
+  const isPublic = (hangout as any).visibility === "public";
+  const canPropose = !terminal && !pendingProposal && !(isPublic && viewer.type !== "ned");
 
   return (
     <div className="mt-8 rounded-3xl border border-border/60 bg-card shadow-soft overflow-hidden">
@@ -54,10 +56,10 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
         <div>
           <h2 className="font-display text-xl text-primary">The agreement</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {participants.length} participant{participants.length === 1 ? "" : "s"} · changes require everyone to agree
+            {participants.length} participant{participants.length === 1 ? "" : "s"} · {isPublic ? "public hangout — Ned manages details" : "changes require everyone to agree"}
           </p>
         </div>
-        {!terminal && !pendingProposal && (
+        {canPropose && (
           <button
             onClick={() => setProposing(true)}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
@@ -66,6 +68,7 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
           </button>
         )}
       </div>
+
 
       {/* Reconfirmation banner */}
       {viewer.needs_reconfirmation && (viewer.type === "invitee" || viewer.type === "attendee") && (
