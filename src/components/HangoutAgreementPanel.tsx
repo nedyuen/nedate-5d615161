@@ -215,10 +215,10 @@ function PendingProposal({
 
   const waitingMessage = isProposer
     ? nedApprovesOnly
-      ? "Waiting for Ned to approve or reject."
+      ? "Ned is reviewing this change."
       : "Waiting for the other side to respond."
     : nedApprovesOnly && !viewerIsNed
-      ? "Only Ned can approve or reject this proposal. You'll get a reconfirmation if the time changes."
+      ? "Ned is reviewing this change. Only Ned can approve or reject proposals for this hangout — you'll be asked to reconfirm attendance if the time changes."
       : "Waiting on response.";
 
   return (
@@ -258,7 +258,9 @@ function PendingProposal({
           </div>
         </>
       ) : (
-        <div className="mt-2 text-xs text-muted-foreground">{waitingMessage}</div>
+        <div className="mt-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-primary">Read-only:</span> {waitingMessage}
+        </div>
       )}
     </div>
   );
