@@ -404,7 +404,7 @@ export const respondToHangoutChange = createServerFn({ method: "POST" })
       }
       updatePayload.updated_at = new Date().toISOString();
 
-      const { error: upErr } = await supabaseAdmin
+      const { error: upErr } = await (supabaseAdmin as any)
         .from("requests")
         .update(updatePayload)
         .eq("id", proposal.hangout_id);
