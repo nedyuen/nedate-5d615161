@@ -303,6 +303,14 @@ export const createHangout = createServerFn({ method: "POST" })
       return { ok: false as const, error: "insert_failed" as const };
     }
 
+    // Participant lifecycle: Ned participant
+    await supabaseAdmin.from("hangout_participants").insert({
+      hangout_id: hangout.id,
+      type: "ned",
+      role_source: "ned",
+      display_name: "Ned",
+    });
+
     let invitedCount = 0;
     if (data.invitees.length) {
       const { data: invitees, error: invErr } = await supabaseAdmin
@@ -319,6 +327,18 @@ export const createHangout = createServerFn({ method: "POST" })
         console.error("[hangouts] invitee insert", invErr);
       } else if (invitees) {
         invitedCount = invitees.length;
+        // Participant lifecycle: invitee participants
+        await supabaseAdmin.from("hangout_participants").insert(
+          invitees.map((inv) => ({
+            hangout_id: hangout.id,
+            type: "invitee" as const,
+            slug: inv.slug,
+            email: inv.email,
+            display_name: inv.name,
+            role_source: "invite" as const,
+            source_row_id: inv.id,
+          })),
+        );
         const v = venueDisplayServer(hangout as any);
         const venueText = v.name + (v.location ? ` · ${v.location}` : "");
         await Promise.allSettled(
