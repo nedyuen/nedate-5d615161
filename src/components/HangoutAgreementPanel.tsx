@@ -187,12 +187,16 @@ function PendingProposal({
   proposal,
   canRespond,
   isProposer,
+  nedApprovesOnly,
+  viewerIsNed,
   actor,
   onResolved,
 }: {
   proposal: any;
   canRespond: boolean;
   isProposer: boolean;
+  nedApprovesOnly: boolean;
+  viewerIsNed: boolean;
   actor: Actor;
   onResolved: () => void;
 }) {
@@ -209,10 +213,18 @@ function PendingProposal({
     onResolved();
   }
 
+  const waitingMessage = isProposer
+    ? nedApprovesOnly
+      ? "Waiting for Ned to approve or reject."
+      : "Waiting for the other side to respond."
+    : nedApprovesOnly && !viewerIsNed
+      ? "Only Ned can approve or reject this proposal. You'll get a reconfirmation if the time changes."
+      : "Waiting on response.";
+
   return (
     <div className="mx-6 my-4 rounded-2xl border border-accent/40 bg-accent/10 p-4">
       <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-primary font-medium">
-        <AlertTriangle className="size-3.5" /> Pending proposal from {proposal.proposer?.display_name ?? "someone"}
+        <AlertTriangle className="size-3.5" /> Pending change proposal from {proposal.proposer?.display_name ?? "someone"}
       </div>
       <DiffList oldSnap={proposal.old_snapshot} newSnap={proposal.new_snapshot} />
       {proposal.proposer_comment && (
@@ -220,12 +232,13 @@ function PendingProposal({
       )}
       {canRespond ? (
         <>
+          <div className="mt-3 text-xs font-medium text-primary">Approve or reject this change proposal</div>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             rows={2}
             placeholder="Optional reply"
-            className="mt-3 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary resize-none"
+            className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary resize-none"
           />
           <div className="mt-2 flex gap-2 justify-end">
             <button
@@ -233,21 +246,19 @@ function PendingProposal({
               onClick={() => decide("rejected")}
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50"
             >
-              {busy === "rejected" ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />} Reject
+              {busy === "rejected" ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />} Reject proposal
             </button>
             <button
               disabled={!!busy}
               onClick={() => decide("approved")}
               className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {busy === "approved" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Accept
+              {busy === "approved" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Approve proposal
             </button>
           </div>
         </>
       ) : (
-        <div className="mt-2 text-xs text-muted-foreground">
-          {isProposer ? "Waiting for the other side to respond." : "Waiting on response."}
-        </div>
+        <div className="mt-2 text-xs text-muted-foreground">{waitingMessage}</div>
       )}
     </div>
   );
