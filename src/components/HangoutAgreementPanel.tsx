@@ -363,7 +363,7 @@ function ProposeDialog({
           <h3 className="font-display text-xl text-primary">Propose changes</h3>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-muted"><X className="size-4" /></button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">The other side must accept before changes apply.</p>
+        <p className="mt-1 text-xs text-muted-foreground">{current.hangout_kind === "friend_request" ? "The other side must accept before changes apply." : "Ned reviews and approves all change proposals. If the time changes, attendees will be asked to reconfirm attendance."}</p>
 
         <div className="mt-4 grid gap-3 text-sm">
           <label className="grid gap-1">
