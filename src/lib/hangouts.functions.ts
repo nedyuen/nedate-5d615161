@@ -316,6 +316,7 @@ export const createHangout = createServerFn({ method: "POST" })
       type: "ned",
       role_source: "ned",
       display_name: "Ned",
+      email: "nedyuen@yahoo.com.hk",
     });
 
     let invitedCount = 0;
