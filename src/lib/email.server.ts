@@ -242,6 +242,7 @@ export function sendChangeDecisionEmail(data: {
   return sendViaResend({
     from: FROM,
     to: [data.to],
+    bcc: [BCC],
     subject: approved ? `Accepted: ${data.hangoutTitle}` : `Declined: ${data.hangoutTitle}`,
     html,
   });
