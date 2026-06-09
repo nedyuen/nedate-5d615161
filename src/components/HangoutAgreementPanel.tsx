@@ -258,7 +258,9 @@ function PendingProposal({
           </div>
         </>
       ) : (
-        <div className="mt-2 text-xs text-muted-foreground">{waitingMessage}</div>
+        <div className="mt-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-primary">Read-only:</span> {waitingMessage}
+        </div>
       )}
     </div>
   );
