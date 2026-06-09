@@ -109,6 +109,8 @@ function InvitePage() {
               </button>
             </div>
           )}
+
+          <HangoutAgreementPanel actor={{ kind: "slug", slug }} />
         </div>
       </main>
     </div>
