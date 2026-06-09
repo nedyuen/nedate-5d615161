@@ -219,6 +219,13 @@ export const respondToInvite = createServerFn({ method: "POST" })
       .maybeSingle();
     if (error || !invite) return { ok: false as const, error: "not_found" as const };
 
+    // Clear reconfirmation flag on the participant row for this invitee slug
+    await supabaseAdmin
+      .from("hangout_participants")
+      .update({ needs_reconfirmation: false })
+      .eq("slug", data.slug);
+
+
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select("title, pitch")
