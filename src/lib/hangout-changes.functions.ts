@@ -246,9 +246,7 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     if (hangout.hangout_status === "cancelled" || hangout.hangout_status === "completed") {
       return { ok: false as const, error: "hangout_terminal" as const };
     }
-    if (hangout.visibility === "public" && viewer.type !== "ned") {
-      return { ok: false as const, error: "public_admin_only" as const };
-    }
+    // Any active participant may propose changes in any hangout kind.
 
 
 
