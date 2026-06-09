@@ -255,6 +255,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangou
               </div>
             </div>
           )}
+          <HangoutAgreementPanel actor={{ kind: "admin", adminPassword: ADMIN_PASSWORD, hangoutId: h.id }} />
         </div>
       )}
     </div>
