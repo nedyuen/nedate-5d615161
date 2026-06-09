@@ -238,7 +238,7 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, title, pitch, start_time, end_time, hangout_status, visibility, category, venue_id, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location)",
+        "id, title, pitch, start_time, end_time, hangout_status, visibility, hangout_kind, category, venue_id, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location)",
       )
       .eq("id", viewer.hangout_id)
       .maybeSingle();
