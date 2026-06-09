@@ -323,14 +323,14 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     // Notify recipients who need to act on this proposal.
     // - friend_request: everyone else (the counterparty).
     // - public/private: only Ned, since only Ned can approve.
-    const notifyQuery = supabaseAdmin
+    let notifyQuery = supabaseAdmin
       .from("hangout_participants")
       .select("id, type, slug, email, display_name")
       .eq("hangout_id", viewer.hangout_id)
       .eq("is_active", true)
       .neq("id", viewer.id);
     if (hangout.hangout_kind !== "friend_request") {
-      notifyQuery.eq("type", "ned");
+      notifyQuery = notifyQuery.eq("type", "ned");
     }
     const { data: others } = await notifyQuery;
 
