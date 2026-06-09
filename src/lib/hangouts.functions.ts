@@ -149,10 +149,11 @@ export const submitJoinRequest = createServerFn({ method: "POST" })
       .insert(insertPayload)
       .select("slug")
       .single();
-    if (iErr || !inserted) {
+    if (error || !inserted) {
       console.error("[hangouts] submitJoinRequest insert", iErr);
       return { ok: false, error: "insert_failed" as const };
     }
+
 
     const v = venueDisplayServer(parent as any);
     const venueText = v.name + (v.location ? ` · ${v.location}` : "");
