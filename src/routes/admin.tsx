@@ -12,6 +12,7 @@ import {
   adminAddVenue,
   adminDeleteVenue,
 } from "@/lib/hangouts.functions";
+import { HangoutAgreementPanel } from "@/components/HangoutAgreementPanel";
 
 
 export const Route = createFileRoute("/admin")({
@@ -333,6 +334,12 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
             {saving === "approved" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Approve
           </button>
         </div>
+
+        {(() => {
+          const hangoutId = req.hangout_kind === "join_request" ? req.parent_hangout_id : req.id;
+          if (!hangoutId) return null;
+          return <HangoutAgreementPanel actor={{ kind: "admin", adminPassword: ADMIN_PASSWORD, hangoutId }} />;
+        })()}
       </div>
     </div>
   );
