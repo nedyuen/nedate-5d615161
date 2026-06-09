@@ -1,0 +1,1 @@
+UPDATE public.hangout_participants SET email = 'nedyuen@yahoo.com.hk' WHERE type = 'ned' AND (email IS NULL OR email = '');
