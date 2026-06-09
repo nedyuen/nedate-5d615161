@@ -1,99 +1,114 @@
-# Unified Hangout System (v3 — final)
+# Hangout Change Proposal System (v5 — locked)
 
-Incorporates v2 plus the 4 final refinements: explicit `visibility` column, `hangouts.slug`, admin comments surfaced to requesters, and a clear service-role boundary.
+Generic propose → approve/reject for any mutable hangout field. Snapshot-based, atomic, one pending proposal per hangout. All identity + permissions flow through `hangout_participants`.
 
-## Data model
+## Architectural invariants (hard rules)
 
-### `hangouts` (extends existing `requests` table)
+1. **`hangout_participants.slug` is the only authoritative identity.** No server-side permission/identity logic ever reads `requests.slug` or `hangout_invitees.slug`. URL slugs from `/r/<slug>` and `/i/<slug>` are mapped to a participant row at the boundary; the original slug is discarded.
+2. **Permissions derive only from `hangout_participants`.** No inference from email matching, request type, invitee tables, or join_request tables.
+3. **Participants are created in exactly three places** — `createHangout`, `submitFriendRequest`, `adminUpdateRequestStatus` (on join approval). Nowhere else.
+4. **Participants are never hard-deleted.** Only mechanism for removal is `is_active = false`. Every permission check requires `is_active = true`.
+5. **Pending/rejected join_request rows never become participants** and are never resolvable via `resolveActor`. Only approved join_requests produce an `attendee` participant.
+6. **Reconfirmation triggers only on `start_time` or `end_time` changes.** Venue, title, pitch, category changes apply silently with no reconfirmation.
+7. **Admin is not a separate identity** — admin auth always resolves to the hangout's `ned` participant row.
 
-Columns added:
+## 1. Database
 
-- `hangout_kind` text NOT NULL — `'friend_request' | 'public_hangout' | 'private_hangout' | 'join_request'`. Default `'friend_request'`.
-- `initiator` text NOT NULL — `'friend' | 'ned'`. Default `'friend'`.
-- `visibility` text NOT NULL — `'public' | 'private'`. **Explicit column** (not inferred from kind). Default `'private'`. Used for homepage / discovery filters.
-- `hangout_status` text NOT NULL — `'draft' | 'active' | 'cancelled' | 'completed'`. Default `'active'`.
-- `request_status` text NULL — `'pending' | 'approved' | 'rejected'`. Set only for request-style rows (`friend_request`, `join_request`); NULL for hangout-style rows.
-- `title` text NULL — Ned-set title for Ned-initiated hangouts.
-- `parent_hangout_id` uuid NULL REFERENCES requests(id) ON DELETE CASCADE — set on `join_request`.
-- `request_message` text NULL — optional message from a join requester.
-- `custom_venue_name` text NULL, `custom_venue_location` text NULL, `custom_venue_image_url` text NULL.
+### `hangout_participants`
+- `id` uuid PK
+- `hangout_id` uuid → `requests(id)` on delete cascade
+- `type` text: `ned` | `requester` | `invitee` | `attendee`
+- `slug` text NULL — the only authoritative access key
+- `email` text NULL
+- `display_name` text NULL
+- `role_source` text: `friend_request` | `invite` | `join_request` | `ned`
+- `source_row_id` uuid NULL — backref to originating request/invitee row
+- `is_active` boolean NOT NULL default true
+- `needs_reconfirmation` boolean NOT NULL default false
+- `created_at`, `updated_at`
 
-Existing `slug` column already exists (10-char default) and is reused as `hangouts.slug` — usable for `/join/<slug>`, share links, tracking. We'll widen to 16-char default on new rows for the join URL space; existing slugs remain valid.
+Constraints:
+- `UNIQUE (hangout_id, type) WHERE type = 'ned'` — exactly one Ned per hangout
+- Partial unique on `slug` where slug IS NOT NULL
 
-Existing `admin_comment` column is **kept and surfaced to the requester** (see §3 below). Not internal-only.
+### `hangout_change_requests`
+- `id` uuid PK
+- `hangout_id` uuid → `requests(id)` on delete cascade
+- `proposed_by_participant_id` uuid → `hangout_participants(id)`
+- `status` text: `pending` | `approved` | `rejected`
+- `old_snapshot` jsonb, `new_snapshot` jsonb (subset of: `start_time`, `end_time`, `venue_id`, `custom_venue_name`, `custom_venue_location`, `custom_venue_image_url`, `title`, `pitch`, `category`)
+- `proposer_comment` text
+- `responder_participant_id` uuid NULL, `responder_comment` text
+- `created_at`, `responded_at`
+- Partial unique: one `pending` row per `hangout_id`
 
-Existing `status` and `custom_venue` columns are backfilled then dropped (status → `hangout_status`/`request_status`; custom_venue → `custom_venue_name`).
+### Backfill (same migration)
+- Each existing hangout (`requests.initiator='ned'`): insert a `ned` participant
+- Each `friend_request` row: insert a `requester` participant (slug = request slug) + a `ned` participant
+- Each `join_request` row with `request_status='approved'`: insert an `attendee` participant (slug = request slug). Pending/rejected → nothing.
+- Each `hangout_invitees` row: insert an `invitee` participant (slug = invitee slug)
 
-### Constraints (DB-enforced)
+Grants: service-role only on both new tables; RLS enabled, no public policies. All access via server functions.
 
-- `chk_visibility_consistency`: `(hangout_kind = 'public_hangout' AND visibility = 'public') OR (hangout_kind <> 'public_hangout' AND visibility = 'private')` — keeps `visibility` and `kind` aligned but keeps `visibility` as the canonical query field.
-- `chk_request_status_presence`: `request_status IS NOT NULL` iff `hangout_kind IN ('friend_request','join_request')`.
-- `chk_parent_hangout`: `parent_hangout_id IS NOT NULL` iff `hangout_kind = 'join_request'`.
-- `chk_requester_fields`: requester_name/email NOT NULL iff request-style row.
-- `chk_venue_exclusive`: `(venue_id IS NOT NULL)::int + (custom_venue_name IS NOT NULL)::int = 1`.
-- `chk_initiator_kind`: `initiator='ned'` ⇔ `hangout_kind IN ('public_hangout','private_hangout')`.
+## 2. Layer separation
 
-### `hangout_invitees` (new)
+**Auth layer** (only place slugs/admin tokens are touched):
+- `resolveActor(input)` returns an active `hangout_participants` row:
+  - `{ slug }` → participant whose `slug` matches AND `is_active = true`
+  - `{ adminPassword, hangoutId }` → the `ned` participant for that hangout
+- Returns Unauthorized otherwise.
 
-`id`, `hangout_id` FK CASCADE, `name`, `email`, `slug` UNIQUE (16-char), `response_status` (`pending|accepted|declined|maybe`, default pending), `comment`, `responded_at`, `created_at`. RLS enabled, NO public policies — accessed only via server fns using service role.
+**Domain layer** (no slugs, no emails, no request-kind branching):
+- `canProposeChange(participant, hangout)` → participant active AND hangout not terminal AND no pending proposal
+- `canRespondToChange(participant, proposal)` → participant active AND not the proposer
+- `applyApprovedProposal(hangout, proposal)` → atomic write of `new_snapshot`. Only if `start_time` or `end_time` is among changed keys → set `needs_reconfirmation = true` on all active participants where `type IN ('invitee','attendee')`.
 
-## Service-role boundary (explicit confirmation)
+Routes (`/r/<slug>`, `/i/<slug>`) are presentation only.
 
-- `SUPABASE_SERVICE_ROLE_KEY` is read **only** inside `.handler()` bodies of server fns via `supabaseAdmin` from `@/integrations/supabase/client.server`.
-- `client.server.ts` is **never** imported by any file under `src/routes/` or `src/components/`. In `.functions.ts` files reachable from the client, we use `await import('@/integrations/supabase/client.server')` inside the handler.
-- The browser bundle continues to use the publishable-key `supabase` client only. No service-role string appears in any `VITE_*` env, asset, or shipped JS.
-- All privileged operations — invitee CRUD, admin reads/writes for hangouts, invite responses, join-request inserts that need to bypass RLS — happen inside server fns.
-- `hangout_invitees` has RLS enabled with **no** anon/authenticated policies, so even if the key leaked, the table is unreachable from the client.
+## 3. Server functions (`src/lib/hangouts.functions.ts`)
 
-## Server functions (`src/lib/hangouts.functions.ts`)
+- `getParticipantContext({ actor })` — returns `{ hangout, viewer, pendingProposal, history, otherParticipants }`. Powers `/r`, `/i`, and admin's per-hangout view.
+- `proposeHangoutChange({ actor, changes, comment })` — resolveActor → permission check → snapshot insert → email other active participants
+- `respondToHangoutChange({ actor, decision, comment })` — resolveActor → permission check → atomic apply (time-only triggers reconfirmation) or rejection → notification email
+- `respondToInvite` + attendee reconfirm path: clear `needs_reconfirmation` on the responding participant after successful reply
 
-- `listUpcomingPublicHangouts()` → public read for homepage (filter `visibility='public'` AND `hangout_status='active'` AND `start_time >= now()`).
-- `getPublicHangoutBySlug({ slug })` → join-form prefill; reads parent live (no data copying).
-- `submitJoinRequest({ slug, name, email, message })` → inserts `join_request` row with `parent_hangout_id`, `request_status='pending'`, `visibility='private'`; sends confirmation email + admin notification.
-- `getInviteByToken({ slug })` → returns invitee + hangout details.
-- `respondToInvite({ slug, response, comment })` → updates invitee row, emails Ned.
-- `createHangout({ visibility, category, title, pitch, start_time, venue, invitees })` (admin) → inserts hangout, inserts invitees, fires invitation emails. Sets `hangout_kind` from `visibility` (`public`→`public_hangout`, `private`→`private_hangout`) and `initiator='ned'`.
-- `respondAdminRequest({ id, decision, comment })` (admin) → sets `request_status`, writes `admin_comment`, sends update email (includes comment).
-- `adminListHangouts()` → unified admin feed.
+### Participant lifecycle hooks (the only three creation sites)
+- **`createHangout`** — Ned-initiated hangout creation: insert `ned` participant + one `invitee` participant per invitee
+- **`submitFriendRequest`** — *hangout creation trigger*: creates a new hangout owned by Ned, then inserts one `ned` participant AND one `requester` participant
+- **`adminUpdateRequestStatus`** on a `join_request`: on `approved` insert an `attendee` participant (slug = the request's slug). On `rejected` do nothing.
 
-Admin server fns gated by an `X-Admin-Token` header derived from `ADMIN_PASSWORD`, validated server-side against `process.env.ADMIN_PASSWORD`.
+Atomicity: a proposal is approved or rejected as a whole.
 
-## Admin comments surfaced to requesters
+Emails (`email.server.ts`):
+- `sendChangeProposedEmail` — to each other active participant, diff + link to their page
+- `sendChangeDecisionEmail` — to proposer
+- `sendReconfirmAttendanceEmail` — to invitee/attendee participants only when time changed
 
-`admin_comment` is **not internal**. It flows through to:
+All actions on-site; emails carry links only.
 
-1. **Email** — `sendRequestUpdate` already templates the comment as "A note from Ned" and is sent on every approve/reject. Confirmed kept.
-2. **Tracking page** — `src/routes/r.$slug.tsx` (existing) displays the comment when present, shown to the requester on their tracking link. We'll verify the comment renders for both `friend_request` and `join_request` rows.
+## 4. UI — unified Participant Hangout Page
 
-## Emails
+Shared `<HangoutAgreementPanel />` used on `/r/<slug>`, `/i/<slug>`, and admin's per-hangout view. Capabilities driven entirely by server-returned `{ viewer, pendingProposal }`:
 
-Extend `src/lib/email.functions.ts`:
-- `sendInvitation` — to invitee, BCC nedyuen@.
-- `sendInviteeResponseToNed` — to Ned with invitee name/email/status/comment.
-- Reuse `sendRequestConfirmation` / `sendRequestUpdate` for both friend_request and join_request.
+- Current details card
+- Pending proposal banner (old → new diff, proposer name, comment)
+  - Proposer side: "Waiting for response"
+  - Otherwise: **Accept Changes** / **Reject Changes** + optional comment
+- **Propose Changes** dialog (hidden while a proposal is pending): field picker → atomic snapshot submit
+- **Reconfirm attendance** prompt when `viewer.needs_reconfirmation` is true (Yes / Maybe / No)
+- Collapsible **Change history**
 
-## Routes
+## 5. Public hangouts
 
-- `src/routes/index.tsx` — add "Upcoming Hangouts" section under "Things I'd Like To Do" using `listUpcomingPublicHangouts`. Cards link to `/join/<hangouts.slug>`.
-- `src/routes/join.$slug.tsx` (new) — public join request form.
-- `src/routes/i.$slug.tsx` (new) — invitee landing page with Accept / Maybe / Decline + comment.
-- `src/routes/r.$slug.tsx` — verify admin comment is shown.
-- `src/routes/request.tsx` — unchanged friend-request flow.
-- `src/routes/admin.tsx` — unified Hangouts tab with grouped sections + "Create hangout" modal (single-page form, 15-min datetime, venue picker or custom fields, invitee repeater, ≥1 invitee required if Private).
+Visitors of `/join/<slug>` are NOT participants unless they have an approved `join_request` that created an `attendee` participant row. Anonymous visitors and pending/rejected requesters see read-only details with no propose/respond UI.
 
-## Out of scope
+## 6. Out of scope
+- Withdrawing pending proposals
+- In-email action buttons
+- Multiple concurrent proposals
+- Partial-field acceptance
+- Reconfirmation for non-time changes
 
-- Full admin auth migration (still password-gated; admin server fns gated by shared token).
-- Draft/completed lifecycle UI (column exists; future).
-- Custom venues never inserted into `venues`.
+---
 
-## Technical details
-
-- Migration: ALTER + backfill in one migration; add constraints AFTER backfill. Set `visibility='private'` for all backfilled rows (existing data is friend requests). Drop legacy `status` and `custom_venue` columns at end.
-- Constraint pairing: app-level `createHangout` always sets `visibility` and `hangout_kind` consistently; `chk_visibility_consistency` enforces this so a mistaken UI write fails fast.
-- `hangouts.slug` reuses existing column; clients link via `<Link to="/join/$slug" params={{ slug }}>`.
-- `client.server.ts` imports remain inside `.handler()` bodies; verified no route/component import path reaches it.
-- `attachSupabaseAuth` middleware already wired; admin token sent via `useServerFn` request header (passed through serverFn input or via a thin fetch wrapper — TanStack serverFn supports custom request headers via middleware; we'll use a small request-side middleware that reads admin token from `sessionStorage`).
-- After migration, `src/integrations/supabase/types.ts` regenerates; downstream code updates.
-
-Ready to build on approval.
+Ship order: migration (tables + constraints + backfill) → auth/domain helpers → server fns + email helpers → `<HangoutAgreementPanel />` + Propose dialog → wire into `/r`, `/i`, admin → reconfirmation prompt on `/r` + `/i` → hook participant creation into `createHangout`, `submitFriendRequest`, `adminUpdateRequestStatus`.
