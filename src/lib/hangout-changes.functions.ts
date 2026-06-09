@@ -175,7 +175,7 @@ export const getParticipantContext = createServerFn({ method: "POST" })
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, slug, category, title, pitch, start_time, end_time, hangout_kind, hangout_status, request_status, admin_comment, request_message, requester_name, venue_id, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+        "id, slug, category, title, pitch, start_time, end_time, hangout_kind, hangout_status, request_status, admin_comment, request_message, requester_name, venue_id, custom_venue_name, custom_venue_location, custom_venue_image_url, visibility, venue:venues(name, location, image_url)",
       )
       .eq("id", viewer.hangout_id)
       .maybeSingle();
