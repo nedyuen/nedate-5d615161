@@ -443,12 +443,31 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         venue_id: data.venue_id,
         custom_venue_name: data.venue_id ? null : data.custom_venue_name,
       })
-      .select("slug")
+      .select("id, slug")
       .single();
     if (error || !inserted) {
       console.error("[hangouts] submitFriendRequest", error);
       return { ok: false as const, error: "insert_failed" as const };
     }
+
+    // Participant lifecycle: Ned + requester for this hangout-creating flow
+    await supabaseAdmin.from("hangout_participants").insert([
+      {
+        hangout_id: inserted.id,
+        type: "ned",
+        role_source: "ned",
+        display_name: "Ned",
+      },
+      {
+        hangout_id: inserted.id,
+        type: "requester",
+        slug: inserted.slug,
+        email: data.email,
+        display_name: data.name,
+        role_source: "friend_request",
+        source_row_id: inserted.id,
+      },
+    ]);
 
     // Fetch venue info for the email
     let venueText = data.custom_venue_name ?? "TBD";
