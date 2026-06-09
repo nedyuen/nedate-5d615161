@@ -336,6 +336,11 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
           </button>
         </div>
 
+        {req.hangout_kind === "friend_request" && (
+          <div className="mt-6">
+            <HangoutAgreementPanel actor={{ kind: "admin", adminPassword: ADMIN_PASSWORD, hangoutId: req.id }} />
+          </div>
+        )}
       </div>
     </div>
   );
