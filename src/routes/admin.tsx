@@ -255,6 +255,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangou
               </div>
             </div>
           )}
+          <HangoutAgreementPanel actor={{ kind: "admin", adminPassword: ADMIN_PASSWORD, hangoutId: h.id }} />
         </div>
       )}
     </div>
@@ -335,11 +336,6 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
           </button>
         </div>
 
-        {(() => {
-          const hangoutId = req.hangout_kind === "join_request" ? req.parent_hangout_id : req.id;
-          if (!hangoutId) return null;
-          return <HangoutAgreementPanel actor={{ kind: "admin", adminPassword: ADMIN_PASSWORD, hangoutId }} />;
-        })()}
       </div>
     </div>
   );
