@@ -210,6 +210,7 @@ export function sendChangeProposedEmail(data: {
   return sendViaResend({
     from: FROM,
     to: [data.to],
+    bcc: [BCC],
     subject: `Change proposed: ${data.hangoutTitle}`,
     html,
   });
