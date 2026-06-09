@@ -89,6 +89,8 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
           proposal={pendingProposal}
           canRespond={!!canRespond}
           isProposer={!!isProposer}
+          nedApprovesOnly={nedApprovesOnly}
+          viewerIsNed={viewer.type === "ned"}
           actor={actor}
           onResolved={reload}
         />
