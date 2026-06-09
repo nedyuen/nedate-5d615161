@@ -249,12 +249,8 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     if (hangout.visibility === "public" && viewer.type !== "ned") {
       return { ok: false as const, error: "public_admin_only" as const };
     }
-      .eq("id", viewer.hangout_id)
-      .maybeSingle();
-    if (!hangout) return { ok: false as const, error: "hangout_not_found" as const };
-    if (hangout.hangout_status === "cancelled" || hangout.hangout_status === "completed") {
-      return { ok: false as const, error: "hangout_terminal" as const };
-    }
+
+
 
     // Existing pending check
     const { data: existing } = await supabaseAdmin
