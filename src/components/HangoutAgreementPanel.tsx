@@ -278,15 +278,17 @@ function ReconfirmBanner({ actor, onDone }: { actor: Actor; onDone: () => void }
   return (
     <div className="mx-6 my-4 rounded-2xl border border-amber-500/40 bg-amber-50/70 p-4">
       <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-medium text-amber-900">
-        <AlertTriangle className="size-3.5" /> Time changed — please reconfirm
+        <AlertTriangle className="size-3.5" /> Confirm attendance after schedule change
       </div>
-      <p className="mt-1 text-sm text-amber-900/80">Can you still make the new time?</p>
+      <p className="mt-1 text-sm text-amber-900/80">
+        The time changed and has been approved. Are you still able to attend? This updates your attendance only — it doesn't change the hangout.
+      </p>
       <div className="mt-2 flex gap-2">
         <button disabled={!!busy} onClick={() => reply("accepted")} className="rounded-full bg-primary px-4 py-2 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-          {busy === "accepted" ? "…" : "Yes, I'm in"}
+          {busy === "accepted" ? "…" : "Attending"}
         </button>
         <button disabled={!!busy} onClick={() => reply("maybe")} className="rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50">Maybe</button>
-        <button disabled={!!busy} onClick={() => reply("declined")} className="rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50">Can't make it</button>
+        <button disabled={!!busy} onClick={() => reply("declined")} className="rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50">Not attending</button>
       </div>
     </div>
   );
