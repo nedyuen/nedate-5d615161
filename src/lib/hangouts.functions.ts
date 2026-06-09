@@ -465,6 +465,7 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         type: "ned",
         role_source: "ned",
         display_name: "Ned",
+        email: "nedyuen@yahoo.com.hk",
       },
       {
         hangout_id: inserted.id,
