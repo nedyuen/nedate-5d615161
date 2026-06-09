@@ -178,3 +178,93 @@ export function sendInviteeResponseToNedEmail(data: {
     html,
   });
 }
+
+function diffBlock(label: string, current: string, proposed: string) {
+  return `<div style="margin-top:12px;background:#F8F5EE;border-radius:14px;padding:14px 16px;font-size:13px;">
+    <div style="color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">${esc(label)}</div>
+    <div style="margin-top:4px;color:#a04040;text-decoration:line-through;">${esc(current)}</div>
+    <div style="margin-top:2px;color:#1E4D3D;font-weight:600;">${esc(proposed)}</div>
+  </div>`;
+}
+
+export function sendChangeProposedEmail(data: {
+  to: string;
+  recipientName: string;
+  proposerName: string;
+  hangoutTitle: string;
+  diffs: { label: string; current: string; proposed: string }[];
+  comment?: string | null;
+  actionUrl: string;
+}): SendResult {
+  const diffsHtml = data.diffs.map((d) => diffBlock(d.label, d.current, d.proposed)).join("");
+  const note = data.comment
+    ? `<div style="margin-top:14px;background:#FBF2DC;border:1px solid #F0DDA8;border-radius:14px;padding:12px 14px;font-size:13px;"><div style="color:#1E4D3D;font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;">A note from ${esc(data.proposerName)}</div><div style="margin-top:4px;">${esc(data.comment)}</div></div>`
+    : "";
+  const html = wrap(
+    `${data.proposerName} wants to change the plan`,
+    `<p style="margin:0 0 8px;font-size:15px;line-height:1.55;">Heads up ${esc(data.recipientName)} — a change has been proposed for <strong>${esc(data.hangoutTitle)}</strong>. Open the page to accept or reject.</p>
+     ${diffsHtml}
+     ${note}
+     ${btn(data.actionUrl, "Review the change")}`,
+  );
+  return sendViaResend({
+    from: FROM,
+    to: [data.to],
+    subject: `Change proposed: ${data.hangoutTitle}`,
+    html,
+  });
+}
+
+export function sendChangeDecisionEmail(data: {
+  to: string;
+  proposerName: string;
+  responderName: string;
+  hangoutTitle: string;
+  decision: "approved" | "rejected";
+  comment?: string | null;
+  actionUrl: string;
+}): SendResult {
+  const approved = data.decision === "approved";
+  const title = approved ? `Your change was accepted ✨` : `Your change was declined`;
+  const intro = approved
+    ? `${data.responderName} accepted your proposed change for ${data.hangoutTitle}. Updated details are live.`
+    : `${data.responderName} declined your proposed change for ${data.hangoutTitle}. The original plan stands.`;
+  const note = data.comment
+    ? `<div style="margin-top:14px;background:#FBF2DC;border:1px solid #F0DDA8;border-radius:14px;padding:12px 14px;font-size:13px;"><div style="color:#1E4D3D;font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;">Their note</div><div style="margin-top:4px;">${esc(data.comment)}</div></div>`
+    : "";
+  const html = wrap(
+    title,
+    `<p style="margin:0 0 8px;font-size:15px;line-height:1.55;">${esc(intro)}</p>
+     ${note}
+     ${btn(data.actionUrl, "View the hangout")}`,
+  );
+  return sendViaResend({
+    from: FROM,
+    to: [data.to],
+    subject: approved ? `Accepted: ${data.hangoutTitle}` : `Declined: ${data.hangoutTitle}`,
+    html,
+  });
+}
+
+export function sendReconfirmAttendanceEmail(data: {
+  to: string;
+  recipientName: string;
+  hangoutTitle: string;
+  oldWhen: string;
+  newWhen: string;
+  actionUrl: string;
+}): SendResult {
+  const html = wrap(
+    `Can you still make it?`,
+    `<p style="margin:0 0 8px;font-size:15px;line-height:1.55;">Hi ${esc(data.recipientName)} — the time for <strong>${esc(data.hangoutTitle)}</strong> changed. Please reconfirm whether you can come.</p>
+     ${diffBlock("When", data.oldWhen, data.newWhen)}
+     ${btn(data.actionUrl, "Reconfirm — Yes / Maybe / No")}`,
+  );
+  return sendViaResend({
+    from: FROM,
+    to: [data.to],
+    bcc: [BCC],
+    subject: `Reconfirm: ${data.hangoutTitle}`,
+    html,
+  });
+}
