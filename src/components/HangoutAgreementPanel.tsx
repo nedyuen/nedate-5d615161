@@ -6,7 +6,7 @@ import {
   respondToHangoutChange,
   reconfirmAttendance,
 } from "@/lib/hangout-changes.functions";
-import { fmtRange, venueDisplay } from "@/lib/nedate";
+import { fmtRange, isoToLondonLocal, londonLocalToIso, venueDisplay } from "@/lib/nedate";
 import { Check, Clock, Loader2, MapPin, Pencil, X, History, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -297,10 +297,7 @@ function ReconfirmBanner({ actor, onDone }: { actor: Actor; onDone: () => void }
 }
 
 function toLocalInput(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return isoToLondonLocal(iso);
 }
 
 function ProposeDialog({
@@ -331,8 +328,8 @@ function ProposeDialog({
 
   async function submit() {
     const changes: any = {};
-    if (start !== origStart) changes.start_time = new Date(start).toISOString();
-    if (end !== origEnd) changes.end_time = end ? new Date(end).toISOString() : null;
+    if (start !== origStart) changes.start_time = londonLocalToIso(start);
+    if (end !== origEnd) changes.end_time = end ? londonLocalToIso(end) : null;
     if (title !== (current.title ?? "")) changes.title = title;
     if (pitch !== (current.pitch ?? "")) changes.pitch = pitch || null;
     if (venueName !== origVenueName || venueLoc !== origVenueLoc) {
