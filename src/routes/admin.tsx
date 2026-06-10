@@ -394,7 +394,7 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
         category,
         title: title.trim(),
         pitch: pitch.trim() || null,
-        start_time: new Date(start).toISOString(),
+        start_time: londonLocalToIso(start),
         venue: useCustom
           ? { kind: "custom", name: customName.trim(), location: customLoc.trim() || null, image_url: customImg.trim() || null }
           : { kind: "existing", venue_id: venueId! },
