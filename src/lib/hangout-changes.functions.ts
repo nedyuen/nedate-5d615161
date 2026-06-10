@@ -80,12 +80,13 @@ async function resolveActor(input: ActorInput) {
 // =========================================================
 // Helpers
 // =========================================================
+const TZ = "Asia/Hong_Kong";
 function fmtWhen(start: string | null | undefined, end: string | null | undefined) {
   if (!start) return "TBD";
   const s = new Date(start);
-  const base = `${s.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${s.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+  const base = `${s.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: TZ })} · ${s.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ })}`;
   if (!end) return base;
-  return `${base} – ${new Date(end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+  return `${base} – ${new Date(end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ })}`;
 }
 
 function venueLabel(h: {
