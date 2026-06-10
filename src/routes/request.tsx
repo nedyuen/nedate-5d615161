@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { CATEGORIES, categoryMeta, type CategoryId } from "@/lib/nedate";
+import { CATEGORIES, categoryMeta, londonLocalToIso, type CategoryId } from "@/lib/nedate";
 import { ArrowLeft, ArrowRight, Check, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { listVenuesByCategory, submitFriendRequest } from "@/lib/hangouts.functions";
