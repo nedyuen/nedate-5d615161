@@ -18,10 +18,10 @@ function assertAdmin(pw: string) {
 // --- helpers ---
 const SLUG_RE = /^[a-z0-9]{8,32}$/i;
 
-const TZ = "Asia/Hong_Kong";
+const TZ = "Europe/London";
 function fmtRangeServer(start: string) {
   const s = new Date(start);
-  return `${s.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: TZ })} · ${s.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ })}`;
+  return `${s.toLocaleDateString("en-GB", { weekday: "short", month: "short", day: "numeric", timeZone: TZ })} · ${s.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", timeZone: TZ })}`;
 }
 
 function venueDisplayServer(h: {
