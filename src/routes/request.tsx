@@ -63,7 +63,7 @@ function RequestPage() {
         name,
         email,
         pitch,
-        start_time: start,
+        start_time: londonLocalToIso(start),
         venue_id: venueId,
         custom_venue_name: venueId ? null : customVenue.trim(),
       },
