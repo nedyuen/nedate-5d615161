@@ -328,8 +328,8 @@ function ProposeDialog({
 
   async function submit() {
     const changes: any = {};
-    if (start !== origStart) changes.start_time = new Date(start).toISOString();
-    if (end !== origEnd) changes.end_time = end ? new Date(end).toISOString() : null;
+    if (start !== origStart) changes.start_time = londonLocalToIso(start);
+    if (end !== origEnd) changes.end_time = end ? londonLocalToIso(end) : null;
     if (title !== (current.title ?? "")) changes.title = title;
     if (pitch !== (current.pitch ?? "")) changes.pitch = pitch || null;
     if (venueName !== origVenueName || venueLoc !== origVenueLoc) {
