@@ -539,14 +539,33 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
               <div className="font-medium text-primary">Invitees {visibility === "private" && <span className="text-xs text-muted-foreground">(required)</span>}</div>
               <button type="button" onClick={addInvitee} className="text-xs inline-flex items-center gap-1 text-primary hover:underline"><Plus className="size-3.5" /> Add</button>
             </div>
+            <datalist id="nedate-contacts">
+              {contacts.map((c) => <option key={c.id} value={c.email}>{c.name}</option>)}
+            </datalist>
             <div className="space-y-2">
-              {invitees.map((inv, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                  <input value={inv.name} onChange={(e) => updInvitee(i, "name", e.target.value)} className="input" placeholder="Name" />
-                  <input value={inv.email} onChange={(e) => updInvitee(i, "email", e.target.value)} type="email" className="input" placeholder="email@example.com" />
-                  <button type="button" onClick={() => removeInvitee(i)} className="rounded-full p-2 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-4" /></button>
-                </div>
-              ))}
+              {invitees.map((inv, i) => {
+                const emailKey = inv.email.trim().toLowerCase();
+                const inContacts = emailKey ? contactsByEmail.has(emailKey) : false;
+                const validEmail = /\S+@\S+\.\S+/.test(inv.email);
+                const canSave = validEmail && !inContacts && inv.name.trim().length > 0;
+                return (
+                  <div key={i} className="space-y-1.5">
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                      <input value={inv.name} onChange={(e) => updInvitee(i, "name", e.target.value)} className="input" placeholder="Name" />
+                      <input value={inv.email} onChange={(e) => updInvitee(i, "email", e.target.value)} type="email" className="input" placeholder="email@example.com" list="nedate-contacts" />
+                      <button type="button" onClick={() => removeInvitee(i)} className="rounded-full p-2 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-4" /></button>
+                    </div>
+                    {inContacts ? (
+                      <div className="text-[11px] text-muted-foreground pl-1 flex items-center gap-1"><Check className="size-3 text-emerald-600" /> Already in contacts</div>
+                    ) : canSave ? (
+                      <label className="text-[11px] text-muted-foreground pl-1 flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" checked={inv.save} onChange={(e) => updInvitee(i, "save", e.target.checked)} className="size-3.5" />
+                        <UserPlus className="size-3" /> Save to contacts
+                      </label>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
