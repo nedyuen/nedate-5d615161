@@ -6,6 +6,7 @@ import { CATEGORIES, categoryMeta, londonLocalToIso, type CategoryId } from "@/l
 import { ArrowLeft, ArrowRight, Check, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { listVenuesByCategory, submitFriendRequest } from "@/lib/hangouts.functions";
+import { DateTimePicker } from "@/components/DateTimePicker";
 
 
 const searchSchema = z.object({ cat: z.string().optional(), venue: z.string().optional() });
