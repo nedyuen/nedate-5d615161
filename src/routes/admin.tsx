@@ -11,7 +11,11 @@ import {
   adminListVenues,
   adminAddVenue,
   adminDeleteVenue,
+  adminAddInvitees,
+  adminRemoveInvitee,
+  adminRemoveJoiner,
 } from "@/lib/hangouts.functions";
+
 import {
   listContacts,
   addContact,
@@ -154,9 +158,10 @@ function HangoutsTab() {
         ) : (
           <div className="space-y-3">
             {nedHangouts.map(h => (
-              <NedHangoutRow key={h.id} h={h} invitees={invitees.filter(i => i.hangout_id === h.id)} joinRequests={joinRequests.filter(j => j.parent_hangout_id === h.id)} onOpenRequest={setActive} />
+              <NedHangoutRow key={h.id} h={h} invitees={invitees.filter(i => i.hangout_id === h.id)} joinRequests={joinRequests.filter(j => j.parent_hangout_id === h.id)} onOpenRequest={setActive} onChanged={load} />
             ))}
           </div>
+
         )}
       </Section>
 
@@ -206,10 +211,29 @@ function StatusPill({ status }: { status: string }) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${cls}`}>{status}</span>;
 }
 
-function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangout; invitees: Invitee[]; joinRequests: Hangout[]; onOpenRequest: (h: Hangout) => void }) {
+function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: { h: Hangout; invitees: Invitee[]; joinRequests: Hangout[]; onOpenRequest: (h: Hangout) => void; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const removeInv = useServerFn(adminRemoveInvitee);
+  const removeJoin = useServerFn(adminRemoveJoiner);
   const v = venueDisplay(h);
+
+  async function handleRemoveInvitee(inv: Invitee) {
+    if (!confirm(`Remove ${inv.name} from this hangout? They'll be notified by email.`)) return;
+    const res = await removeInv({ data: { adminPassword: ADMIN_PASSWORD, inviteeId: inv.id } });
+    if (!res.ok) { toast.error("Couldn't remove"); return; }
+    toast.success(`${inv.name} removed`);
+    onChanged();
+  }
+  async function handleRemoveJoiner(j: Hangout) {
+    if (!confirm(`Remove ${j.requester_name} from this hangout? They'll be notified by email.`)) return;
+    const res = await removeJoin({ data: { adminPassword: ADMIN_PASSWORD, requestId: j.id } });
+    if (!res.ok) { toast.error("Couldn't remove"); return; }
+    toast.success(`${j.requester_name} removed`);
+    onChanged();
+  }
+
   return (
     <div className="rounded-2xl bg-card border border-border/60 shadow-soft">
       <div className="w-full flex items-center gap-3 p-4">
@@ -240,14 +264,20 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangou
             <div className="text-xs text-muted-foreground">Public link: <Link to="/join/$slug" params={{ slug: h.slug }} className="underline">/join/{h.slug}</Link></div>
           )}
           <div>
-            <div className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Invitees ({invitees.length})</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-medium text-primary uppercase tracking-wide">Invitees ({invitees.length})</div>
+              <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><UserPlus className="size-3.5" /> Add invitees</button>
+            </div>
             {invitees.length === 0 ? <Empty>No invitees.</Empty> : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {invitees.map(i => (
                   <div key={i.id} className="rounded-xl border border-border/60 p-3 bg-background">
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-medium text-primary truncate">{i.name}</div>
-                      <InviteePill status={i.response_status} />
+                      <div className="flex items-center gap-1.5">
+                        <InviteePill status={i.response_status} />
+                        <button onClick={() => handleRemoveInvitee(i)} title="Remove invitee" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>
+                      </div>
                     </div>
                     <div className="text-xs text-muted-foreground truncate">{i.email}</div>
                     {i.comment && <div className="mt-2 text-xs italic text-foreground">"{i.comment}"</div>}
@@ -262,14 +292,21 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangou
               <div className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Join requests ({joinRequests.length})</div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {joinRequests.map(j => (
-                  <button key={j.id} onClick={() => onOpenRequest(j)} className="text-left rounded-xl border border-border/60 p-3 bg-background hover:border-primary/40">
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium text-primary truncate">{j.requester_name}</div>
-                      <StatusPill status={j.request_status ?? "pending"} />
+                  <div key={j.id} className="rounded-xl border border-border/60 p-3 bg-background">
+                    <div className="flex items-center justify-between gap-2">
+                      <button onClick={() => onOpenRequest(j)} className="text-left flex-1 min-w-0">
+                        <div className="font-medium text-primary truncate">{j.requester_name}</div>
+                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <StatusPill status={j.request_status ?? "pending"} />
+                        <button onClick={() => handleRemoveJoiner(j)} title="Remove joiner" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">{j.requester_email}</div>
-                    {j.request_message && <div className="mt-1 text-xs italic text-muted-foreground line-clamp-2">"{j.request_message}"</div>}
-                  </button>
+                    <button onClick={() => onOpenRequest(j)} className="text-left w-full">
+                      <div className="text-xs text-muted-foreground truncate">{j.requester_email}</div>
+                      {j.request_message && <div className="mt-1 text-xs italic text-muted-foreground line-clamp-2">"{j.request_message}"</div>}
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -285,9 +322,18 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangou
           onClose={() => setShowBulk(false)}
         />
       )}
+      {showAdd && (
+        <AddInviteesModal
+          hangout={h}
+          existingEmails={new Set(invitees.map((i) => i.email.toLowerCase()))}
+          onClose={() => setShowAdd(false)}
+          onAdded={() => { setShowAdd(false); onChanged(); }}
+        />
+      )}
     </div>
   );
 }
+
 
 function InviteePill({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -910,3 +956,132 @@ function BulkMessageModal({
   );
 }
 
+
+// ===== Add invitees modal =====
+function AddInviteesModal({
+  hangout,
+  existingEmails,
+  onClose,
+  onAdded,
+}: {
+  hangout: Hangout;
+  existingEmails: Set<string>;
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const add = useServerFn(adminAddInvitees);
+  const fetchContacts = useServerFn(listContacts);
+  const saveContact = useServerFn(addContact);
+  type Draft = { name: string; email: string; save: boolean };
+  const [rows, setRows] = useState<Draft[]>([{ name: "", email: "", save: false }]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetchContacts({ data: { adminPassword: ADMIN_PASSWORD } }).then((r) => setContacts(r.contacts ?? []));
+  }, [fetchContacts]);
+
+  const contactsByEmail = useMemo(
+    () => new Map(contacts.map((c) => [c.email.toLowerCase(), c])),
+    [contacts],
+  );
+
+  function upd(i: number, k: keyof Draft, val: string | boolean) {
+    setRows((v) => v.map((x, ix) => {
+      if (ix !== i) return x;
+      const next = { ...x, [k]: val } as Draft;
+      if (k === "email" && typeof val === "string") {
+        const match = contactsByEmail.get(val.trim().toLowerCase());
+        if (match && !next.name) next.name = match.name;
+        if (match) next.save = false;
+      }
+      return next;
+    }));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const clean = rows
+      .map((r) => ({ name: r.name.trim(), email: r.email.trim(), save: r.save }))
+      .filter((r) => r.name && /\S+@\S+\.\S+/.test(r.email));
+    if (clean.length === 0) { toast.error("Add at least one invitee"); return; }
+    const dupes = clean.filter((r) => existingEmails.has(r.email.toLowerCase()));
+    if (dupes.length) { toast.error(`Already invited: ${dupes.map(d => d.email).join(", ")}`); return; }
+    setBusy(true);
+    const res = await add({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        hangoutId: hangout.id,
+        invitees: clean.map(({ name, email }) => ({ name, email })),
+      },
+    });
+    if (!res.ok) {
+      setBusy(false);
+      toast.error("Couldn't add invitees");
+      return;
+    }
+    const toSave = clean.filter((r) => r.save && !contactsByEmail.has(r.email.toLowerCase()));
+    if (toSave.length) {
+      await Promise.allSettled(
+        toSave.map((c) => saveContact({ data: { adminPassword: ADMIN_PASSWORD, name: c.name, email: c.email } })),
+      );
+    }
+    setBusy(false);
+    toast.success(`${res.invitedCount} invited${toSave.length ? ` · ${toSave.length} saved` : ""}`);
+    onAdded();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-xl rounded-3xl bg-card border border-border/60 p-7 shadow-warm max-h-[92vh] overflow-auto">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="font-display text-2xl text-primary flex items-center gap-2"><UserPlus className="size-5" /> Add invitees</h2>
+            <p className="text-sm text-muted-foreground truncate">{hangout.title}</p>
+            <p className="text-xs text-muted-foreground mt-1">They'll get an invitation email and can respond Yes / Maybe / No.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted"><X className="size-4" /></button>
+        </div>
+
+        <datalist id="nedate-add-contacts">
+          {contacts.map((c) => <option key={c.id} value={c.email}>{c.name}</option>)}
+        </datalist>
+
+        <div className="space-y-2">
+          {rows.map((r, i) => {
+            const emailKey = r.email.trim().toLowerCase();
+            const inContacts = emailKey ? contactsByEmail.has(emailKey) : false;
+            const validEmail = /\S+@\S+\.\S+/.test(r.email);
+            const canSave = validEmail && !inContacts && r.name.trim().length > 0;
+            return (
+              <div key={i} className="space-y-1.5">
+                <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                  <input value={r.name} onChange={(e) => upd(i, "name", e.target.value)} className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary" placeholder="Name" />
+                  <input value={r.email} onChange={(e) => upd(i, "email", e.target.value)} type="email" list="nedate-add-contacts" className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary" placeholder="email@example.com" />
+                  <button type="button" onClick={() => setRows((v) => v.filter((_, ix) => ix !== i))} className="rounded-full p-2 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-4" /></button>
+                </div>
+                {inContacts ? (
+                  <div className="text-[11px] text-muted-foreground pl-1 flex items-center gap-1"><Check className="size-3 text-emerald-600" /> Already in contacts</div>
+                ) : canSave ? (
+                  <label className="text-[11px] text-muted-foreground pl-1 flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={r.save} onChange={(e) => upd(i, "save", e.target.checked)} className="size-3.5" />
+                    <UserPlus className="size-3" /> Save to contacts
+                  </label>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        <button type="button" onClick={() => setRows((v) => [...v, { name: "", email: "", save: false }])} className="mt-3 inline-flex items-center gap-1 text-xs text-primary hover:underline"><Plus className="size-3.5" /> Add another</button>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-full border border-border px-5 py-2.5 text-sm hover:bg-muted">Cancel</button>
+          <button disabled={busy} className="rounded-full bg-primary px-6 py-2.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Invite
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

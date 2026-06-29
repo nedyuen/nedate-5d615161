@@ -3,9 +3,11 @@ import { z } from "zod";
 import {
   sendInvitationEmail,
   sendInviteeResponseToNedEmail,
+  sendRemovedFromHangoutEmail,
   sendRequestConfirmationEmail,
   sendRequestUpdateEmail,
 } from "./email.server";
+
 
 // Admin password verified server-side. Mirrors client constant but the
 // authoritative check happens here before any privileged DB operation.
@@ -665,3 +667,202 @@ export const adminUpdateRequestStatus = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+
+// --- admin: add invitees to existing hangout ---
+export const adminAddInvitees = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        adminPassword: z.string().min(1).max(200),
+        hangoutId: z.string().uuid(),
+        invitees: z
+          .array(
+            z.object({
+              name: z.string().trim().min(1).max(200),
+              email: z.string().trim().email().max(255),
+            }),
+          )
+          .min(1)
+          .max(50),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: hangout, error: hErr } = await supabaseAdmin
+      .from("requests")
+      .select(
+        "id, slug, title, pitch, start_time, initiator, hangout_status, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+      )
+      .eq("id", data.hangoutId)
+      .maybeSingle();
+    if (hErr || !hangout) return { ok: false as const, error: "not_found" as const };
+    if ((hangout as any).initiator !== "ned") return { ok: false as const, error: "not_owner" as const };
+
+    const { data: invitees, error: iErr } = await supabaseAdmin
+      .from("hangout_invitees")
+      .insert(
+        data.invitees.map((i) => ({
+          hangout_id: hangout.id,
+          name: i.name,
+          email: i.email,
+        })),
+      )
+      .select("id, name, email, slug");
+    if (iErr || !invitees) {
+      console.error("[hangouts] adminAddInvitees insert", iErr);
+      return { ok: false as const, error: "insert_failed" as const };
+    }
+
+    await supabaseAdmin.from("hangout_participants").insert(
+      invitees.map((inv) => ({
+        hangout_id: hangout.id,
+        type: "invitee" as const,
+        slug: inv.slug,
+        email: inv.email,
+        display_name: inv.name,
+        role_source: "invite" as const,
+        source_row_id: inv.id,
+      })),
+    );
+
+    const v = venueDisplayServer(hangout as any);
+    const venueText = v.name + (v.location ? ` · ${v.location}` : "");
+    await Promise.allSettled(
+      invitees.map((inv) =>
+        sendInvitationEmail({
+          to: inv.email,
+          name: inv.name,
+          hangoutTitle: hangout.title ?? "A hangout with Ned",
+          pitch: hangout.pitch ?? null,
+          venue: venueText,
+          when: fmtRangeServer(hangout.start_time),
+          inviteUrl: `${getOrigin()}/i/${inv.slug}`,
+        }),
+      ),
+    );
+    return { ok: true as const, invitedCount: invitees.length };
+  });
+
+// --- admin: remove invitee (notifies them, no response needed) ---
+export const adminRemoveInvitee = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        adminPassword: z.string().min(1).max(200),
+        inviteeId: z.string().uuid(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: inv } = await supabaseAdmin
+      .from("hangout_invitees")
+      .select("id, name, email, slug, hangout_id")
+      .eq("id", data.inviteeId)
+      .maybeSingle();
+    if (!inv) return { ok: false as const, error: "not_found" as const };
+
+    const { data: hangout } = await supabaseAdmin
+      .from("requests")
+      .select(
+        "id, title, pitch, start_time, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+      )
+      .eq("id", inv.hangout_id)
+      .maybeSingle();
+
+    await supabaseAdmin
+      .from("hangout_participants")
+      .update({ is_active: false })
+      .eq("slug", inv.slug);
+
+    await supabaseAdmin.from("hangout_invitees").delete().eq("id", inv.id);
+
+    if (hangout) {
+      const v = venueDisplayServer(hangout as any);
+      const venueText = v.name + (v.location ? ` · ${v.location}` : "");
+      try {
+        await sendRemovedFromHangoutEmail({
+          to: inv.email,
+          recipientName: inv.name,
+          hangoutTitle: hangout.title ?? "A hangout with Ned",
+          venue: venueText,
+          when: fmtRangeServer(hangout.start_time),
+          reason: "invitee",
+        });
+      } catch (e) {
+        console.error("[hangouts] adminRemoveInvitee email", e);
+      }
+    }
+    return { ok: true as const };
+  });
+
+// --- admin: remove a joiner (join_request) from the parent hangout ---
+export const adminRemoveJoiner = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        adminPassword: z.string().min(1).max(200),
+        requestId: z.string().uuid(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: req } = await supabaseAdmin
+      .from("requests")
+      .select("id, slug, requester_name, requester_email, parent_hangout_id, hangout_kind")
+      .eq("id", data.requestId)
+      .maybeSingle();
+    if (!req || req.hangout_kind !== "join_request") {
+      return { ok: false as const, error: "not_found" as const };
+    }
+
+    const { data: parent } = await supabaseAdmin
+      .from("requests")
+      .select(
+        "id, title, pitch, start_time, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+      )
+      .eq("id", req.parent_hangout_id ?? "")
+      .maybeSingle();
+
+    await supabaseAdmin
+      .from("requests")
+      .update({
+        request_status: "rejected",
+        hangout_status: "cancelled",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", req.id);
+
+    if (req.slug) {
+      await supabaseAdmin
+        .from("hangout_participants")
+        .update({ is_active: false })
+        .eq("slug", req.slug);
+    }
+
+    if (parent && req.requester_email && req.requester_name) {
+      const v = venueDisplayServer(parent as any);
+      const venueText = v.name + (v.location ? ` · ${v.location}` : "");
+      try {
+        await sendRemovedFromHangoutEmail({
+          to: req.requester_email,
+          recipientName: req.requester_name,
+          hangoutTitle: parent.title ?? "A hangout with Ned",
+          venue: venueText,
+          when: fmtRangeServer(parent.start_time),
+          reason: "joiner",
+        });
+      } catch (e) {
+        console.error("[hangouts] adminRemoveJoiner email", e);
+      }
+    }
+    return { ok: true as const };
+  });

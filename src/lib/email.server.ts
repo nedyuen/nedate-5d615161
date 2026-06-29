@@ -299,3 +299,35 @@ export function sendBulkMessageEmail(data: {
     html,
   });
 }
+
+export function sendRemovedFromHangoutEmail(data: {
+  to: string;
+  recipientName: string;
+  hangoutTitle: string;
+  venue: string;
+  when: string;
+  reason: "invitee" | "joiner";
+}): SendResult {
+  const intro =
+    data.reason === "invitee"
+      ? `Heads up ${data.recipientName} — Ned has withdrawn your invitation to <strong>${esc(data.hangoutTitle)}</strong>. No response needed.`
+      : `Heads up ${data.recipientName} — Ned has removed you from <strong>${esc(data.hangoutTitle)}</strong>. No response needed.`;
+  const html = wrap(
+    `Plans changed`,
+    `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;">${intro}</p>
+     <div style="margin-top:6px;background:#F8F5EE;border-radius:16px;padding:16px 18px;font-size:14px;">
+       <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">Where</div>
+       <div style="margin-top:2px;">${esc(data.venue)}</div>
+       <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-top:12px;">When</div>
+       <div style="margin-top:2px;">${esc(data.when)}</div>
+     </div>
+     <p style="margin:18px 0 0;font-size:13px;color:#666;">Catch you on another one soon.</p>`,
+  );
+  return sendViaResend({
+    from: FROM,
+    to: [data.to],
+    bcc: [BCC],
+    subject: `Update: ${data.hangoutTitle}`,
+    html,
+  });
+}
