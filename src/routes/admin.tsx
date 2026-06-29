@@ -158,9 +158,10 @@ function HangoutsTab() {
         ) : (
           <div className="space-y-3">
             {nedHangouts.map(h => (
-              <NedHangoutRow key={h.id} h={h} invitees={invitees.filter(i => i.hangout_id === h.id)} joinRequests={joinRequests.filter(j => j.parent_hangout_id === h.id)} onOpenRequest={setActive} />
+              <NedHangoutRow key={h.id} h={h} invitees={invitees.filter(i => i.hangout_id === h.id)} joinRequests={joinRequests.filter(j => j.parent_hangout_id === h.id)} onOpenRequest={setActive} onChanged={load} />
             ))}
           </div>
+
         )}
       </Section>
 
