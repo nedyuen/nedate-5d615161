@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ADMIN_PASSWORD, ADMIN_STORAGE_KEY, CATEGORIES, categoryMeta, fmtRange, londonLocalToIso, venueDisplay } from "@/lib/nedate";
-import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
+import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles, Send, Mail, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   createHangout,
@@ -12,7 +12,16 @@ import {
   adminAddVenue,
   adminDeleteVenue,
 } from "@/lib/hangouts.functions";
+import {
+  listContacts,
+  addContact,
+  deleteContact,
+  sendBulkMessage,
+} from "@/lib/contacts.functions";
 import { HangoutAgreementPanel } from "@/components/HangoutAgreementPanel";
+
+type Contact = { id: string; name: string; email: string; created_at: string };
+
 
 
 export const Route = createFileRoute("/admin")({
