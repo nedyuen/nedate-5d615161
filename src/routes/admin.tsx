@@ -687,3 +687,226 @@ function VenuesTab() {
     </div>
   );
 }
+
+// ===== Contacts tab =====
+function ContactsTab() {
+  const list = useServerFn(listContacts);
+  const add = useServerFn(addContact);
+  const del = useServerFn(deleteContact);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [form, setForm] = useState({ name: "", email: "" });
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    const r = await list({ data: { adminPassword: ADMIN_PASSWORD } });
+    setContacts(r.contacts ?? []);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim() || !/\S+@\S+\.\S+/.test(form.email)) { toast.error("Name and valid email required"); return; }
+    setSaving(true);
+    const res = await add({ data: { adminPassword: ADMIN_PASSWORD, name: form.name.trim(), email: form.email.trim() } });
+    setSaving(false);
+    if (!res.ok) { toast.error("Couldn't add"); return; }
+    toast.success(res.alreadyExists ? "Already in contacts" : "Added");
+    setForm({ name: "", email: "" });
+    load();
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Remove this contact?")) return;
+    await del({ data: { adminPassword: ADMIN_PASSWORD, id } });
+    load();
+  }
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+      <div>
+        <h2 className="font-display text-3xl text-primary mb-6">Contacts <span className="text-muted-foreground text-base">({contacts.length})</span></h2>
+        {contacts.length === 0 ? (
+          <Empty>No contacts yet. Add friends here so you don't have to retype their emails.</Empty>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {contacts.map((c) => (
+              <div key={c.id} className="rounded-2xl bg-card border border-border/60 p-4 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-primary truncate">{c.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{c.email}</div>
+                </div>
+                <button onClick={() => remove(c.id)} className="rounded-full p-1.5 text-muted-foreground hover:text-destructive hover:bg-muted">
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <form onSubmit={submit} className="rounded-3xl bg-card border border-border/60 p-5 h-fit sticky top-6 shadow-soft">
+        <h3 className="font-display text-lg text-primary flex items-center gap-2"><UserPlus className="size-4" /> Add a contact</h3>
+        <label className="block mt-4">
+          <span className="text-xs font-medium text-primary">Name</span>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" />
+        </label>
+        <label className="block mt-3">
+          <span className="text-xs font-medium text-primary">Email</span>
+          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" />
+        </label>
+        <button disabled={saving} className="mt-5 w-full rounded-full bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          {saving ? "Adding…" : "Add contact"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ===== Bulk message modal =====
+function BulkMessageModal({
+  hangout,
+  invitees,
+  joinRequests,
+  onClose,
+}: {
+  hangout: Hangout;
+  invitees: Invitee[];
+  joinRequests: Hangout[];
+  onClose: () => void;
+}) {
+  const send = useServerFn(sendBulkMessage);
+  const [subject, setSubject] = useState(`Update: ${hangout.title ?? "our hangout"}`);
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const inviteeStatusOptions = ["accepted", "maybe", "pending", "declined"] as const;
+  const joinStatusOptions = ["approved", "pending", "rejected"] as const;
+
+  const [inviteeStatuses, setInviteeStatuses] = useState<Set<typeof inviteeStatusOptions[number]>>(
+    new Set(["accepted", "maybe"]),
+  );
+  const [joinStatuses, setJoinStatuses] = useState<Set<typeof joinStatusOptions[number]>>(
+    new Set(["approved"]),
+  );
+
+  function toggleInvitee(s: typeof inviteeStatusOptions[number]) {
+    setInviteeStatuses((prev) => {
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
+  }
+  function toggleJoin(s: typeof joinStatusOptions[number]) {
+    setJoinStatuses((prev) => {
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
+  }
+
+  const inviteeCount = invitees.filter((i) => inviteeStatuses.has(i.response_status as any)).length;
+  const joinCount = joinRequests.filter((j) => joinStatuses.has((j.request_status ?? "pending") as any)).length;
+  const total = inviteeCount + joinCount;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!subject.trim() || !body.trim()) { toast.error("Subject and message required"); return; }
+    if (total === 0) { toast.error("Select at least one recipient group"); return; }
+    setBusy(true);
+    const res = await send({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        hangoutId: hangout.id,
+        subject: subject.trim(),
+        body: body.trim(),
+        inviteeStatuses: Array.from(inviteeStatuses),
+        joinStatuses: Array.from(joinStatuses),
+        includeAttendees: true,
+      },
+    });
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(res.error === "no_recipients" ? "No matching recipients" : "Send failed");
+      return;
+    }
+    toast.success(`Sent to ${res.sent}/${res.total}`);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-xl rounded-3xl bg-card border border-border/60 p-7 shadow-warm max-h-[92vh] overflow-auto">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="font-display text-2xl text-primary flex items-center gap-2"><Mail className="size-5" /> Message attendees</h2>
+            <p className="text-sm text-muted-foreground truncate">{hangout.title}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted"><X className="size-4" /></button>
+        </div>
+
+        <div className="space-y-4">
+          {invitees.length > 0 && (
+            <div className="rounded-2xl border border-border p-4">
+              <div className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Invitees</div>
+              <div className="flex flex-wrap gap-2">
+                {inviteeStatusOptions.map((s) => {
+                  const n = invitees.filter((i) => i.response_status === s).length;
+                  const active = inviteeStatuses.has(s);
+                  return (
+                    <label key={s} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs cursor-pointer ${active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+                      <input type="checkbox" checked={active} onChange={() => toggleInvitee(s)} className="sr-only" />
+                      <span className="capitalize">{s}</span>
+                      <span className="opacity-70">({n})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {joinRequests.length > 0 && (
+            <div className="rounded-2xl border border-border p-4">
+              <div className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Join requests</div>
+              <div className="flex flex-wrap gap-2">
+                {joinStatusOptions.map((s) => {
+                  const n = joinRequests.filter((j) => (j.request_status ?? "pending") === s).length;
+                  const active = joinStatuses.has(s);
+                  return (
+                    <label key={s} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs cursor-pointer ${active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+                      <input type="checkbox" checked={active} onChange={() => toggleJoin(s)} className="sr-only" />
+                      <span className="capitalize">{s}</span>
+                      <span className="opacity-70">({n})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {invitees.length === 0 && joinRequests.length === 0 && (
+            <Empty>No invitees or join requests to message yet.</Empty>
+          )}
+
+          <label className="block">
+            <span className="text-sm font-medium text-primary">Subject</span>
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} className="mt-1.5 w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm outline-none focus:border-primary" />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-primary">Message</span>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={7} className="mt-1.5 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary resize-none" placeholder="Hey everyone, quick update…" />
+          </label>
+
+          <div className="text-xs text-muted-foreground">Will send to <strong className="text-primary">{total}</strong> recipient{total === 1 ? "" : "s"}.</div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-full border border-border px-5 py-2.5 text-sm hover:bg-muted">Cancel</button>
+          <button disabled={busy || total === 0} className="rounded-full bg-primary px-6 py-2.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Send
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
