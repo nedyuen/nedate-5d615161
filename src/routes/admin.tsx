@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ADMIN_PASSWORD, ADMIN_STORAGE_KEY, CATEGORIES, categoryMeta, fmtRange, londonLocalToIso, venueDisplay } from "@/lib/nedate";
-import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
+import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles, Send, Mail, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   createHangout,
@@ -12,7 +12,16 @@ import {
   adminAddVenue,
   adminDeleteVenue,
 } from "@/lib/hangouts.functions";
+import {
+  listContacts,
+  addContact,
+  deleteContact,
+  sendBulkMessage,
+} from "@/lib/contacts.functions";
 import { HangoutAgreementPanel } from "@/components/HangoutAgreementPanel";
+
+type Contact = { id: string; name: string; email: string; created_at: string };
+
 
 
 export const Route = createFileRoute("/admin")({
@@ -73,7 +82,7 @@ function AdminPage() {
 }
 
 function AdminInner({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"hangouts" | "venues">("hangouts");
+  const [tab, setTab] = useState<"hangouts" | "venues" | "contacts">("hangouts");
   return (
     <div className="min-h-screen bg-background">
       <header className="px-5 pt-6 sm:px-10">
@@ -82,16 +91,16 @@ function AdminInner({ onLogout }: { onLogout: () => void }) {
           <button onClick={onLogout} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary"><LogOut className="size-4" /> Log out</button>
         </div>
         <div className="mx-auto max-w-6xl mt-8 flex items-center gap-2 border-b border-border/60">
-          {(["hangouts", "venues"] as const).map((t) => (
+          {(["hangouts", "venues", "contacts"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition ${tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"}`}>
-              {t === "hangouts" ? "Hangouts" : "Venues & ideas"}
+              {t === "hangouts" ? "Hangouts" : t === "venues" ? "Venues & ideas" : "Contacts"}
             </button>
           ))}
         </div>
       </header>
       <main className="px-5 py-8 sm:px-10">
         <div className="mx-auto max-w-6xl">
-          {tab === "hangouts" ? <HangoutsTab /> : <VenuesTab />}
+          {tab === "hangouts" ? <HangoutsTab /> : tab === "venues" ? <VenuesTab /> : <ContactsTab />}
         </div>
       </main>
     </div>
@@ -199,21 +208,31 @@ function StatusPill({ status }: { status: string }) {
 
 function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangout; invitees: Invitee[]; joinRequests: Hangout[]; onOpenRequest: (h: Hangout) => void }) {
   const [open, setOpen] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const v = venueDisplay(h);
   return (
     <div className="rounded-2xl bg-card border border-border/60 shadow-soft">
-      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-3 p-4 text-left">
-        {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(h.category).emoji} {categoryMeta(h.category).label}</span>
-            <span className={`text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide ${h.visibility === "public" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground"}`}>{h.visibility}</span>
+      <div className="w-full flex items-center gap-3 p-4">
+        <button onClick={() => setOpen(o => !o)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(h.category).emoji} {categoryMeta(h.category).label}</span>
+              <span className={`text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide ${h.visibility === "public" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground"}`}>{h.visibility}</span>
+            </div>
+            <div className="mt-0.5 font-display text-lg text-primary truncate">{h.title}</div>
+            <div className="text-xs text-muted-foreground">{fmtRange(h.start_time)} · {v.name}</div>
           </div>
-          <div className="mt-0.5 font-display text-lg text-primary truncate">{h.title}</div>
-          <div className="text-xs text-muted-foreground">{fmtRange(h.start_time)} · {v.name}</div>
-        </div>
-        <div className="text-xs text-muted-foreground hidden sm:block">{invitees.length} invited{joinRequests.length ? ` · ${joinRequests.length} requests` : ""}</div>
-      </button>
+          <div className="text-xs text-muted-foreground hidden sm:block">{invitees.length} invited{joinRequests.length ? ` · ${joinRequests.length} requests` : ""}</div>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowBulk(true); }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-primary hover:bg-muted"
+          title="Send a message to people in this hangout"
+        >
+          <Mail className="size-3.5" /> Message
+        </button>
+      </div>
       {open && (
         <div className="border-t border-border/60 p-4 space-y-4">
           {h.pitch && <p className="text-sm italic text-muted-foreground">"{h.pitch}"</p>}
@@ -257,6 +276,14 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangou
           )}
           <HangoutAgreementPanel actor={{ kind: "admin", adminPassword: ADMIN_PASSWORD, hangoutId: h.id }} />
         </div>
+      )}
+      {showBulk && (
+        <BulkMessageModal
+          hangout={h}
+          invitees={invitees}
+          joinRequests={joinRequests}
+          onClose={() => setShowBulk(false)}
+        />
       )}
     </div>
   );
@@ -349,6 +376,8 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
 function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const create = useServerFn(createHangout);
   const fetchVenues = useServerFn(adminListVenues);
+  const fetchContacts = useServerFn(listContacts);
+  const saveContact = useServerFn(addContact);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
   const [category, setCategory] = useState<string>(CATEGORIES[0].id);
   const [title, setTitle] = useState("");
@@ -360,7 +389,9 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [customName, setCustomName] = useState("");
   const [customLoc, setCustomLoc] = useState("");
   const [customImg, setCustomImg] = useState("");
-  const [invitees, setInvitees] = useState<{ name: string; email: string }[]>([{ name: "", email: "" }]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  type InviteeDraft = { name: string; email: string; save: boolean };
+  const [invitees, setInvitees] = useState<InviteeDraft[]>([{ name: "", email: "", save: false }]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -369,11 +400,29 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
     });
   }, [category, fetchVenues]);
 
+  useEffect(() => {
+    fetchContacts({ data: { adminPassword: ADMIN_PASSWORD } }).then((r) => setContacts(r.contacts ?? []));
+  }, [fetchContacts]);
 
-  function addInvitee() { setInvitees(v => [...v, { name: "", email: "" }]); }
+  const contactsByEmail = useMemo(
+    () => new Map(contacts.map((c) => [c.email.toLowerCase(), c])),
+    [contacts],
+  );
+
+  function addInvitee() { setInvitees(v => [...v, { name: "", email: "", save: false }]); }
   function removeInvitee(i: number) { setInvitees(v => v.filter((_, ix) => ix !== i)); }
-  function updInvitee(i: number, k: "name" | "email", val: string) {
-    setInvitees(v => v.map((x, ix) => ix === i ? { ...x, [k]: val } : x));
+  function updInvitee(i: number, k: "name" | "email" | "save", val: string | boolean) {
+    setInvitees(v => v.map((x, ix) => {
+      if (ix !== i) return x;
+      const next = { ...x, [k]: val } as InviteeDraft;
+      // If email is changed and matches a contact, auto-fill name
+      if (k === "email" && typeof val === "string") {
+        const match = contactsByEmail.get(val.trim().toLowerCase());
+        if (match && !next.name) next.name = match.name;
+        if (match) next.save = false;
+      }
+      return next;
+    }));
   }
 
   async function submit(e: React.FormEvent) {
@@ -381,7 +430,7 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
     if (!title.trim() || !start) { toast.error("Title and date are required"); return; }
     if (useCustom ? customName.trim().length < 2 : !venueId) { toast.error("Choose or enter a venue"); return; }
     const cleanInvitees = invitees
-      .map(i => ({ name: i.name.trim(), email: i.email.trim() }))
+      .map(i => ({ name: i.name.trim(), email: i.email.trim(), save: i.save }))
       .filter(i => i.name && /\S+@\S+\.\S+/.test(i.email));
     if (visibility === "private" && cleanInvitees.length === 0) {
       toast.error("Private hangouts need at least one invitee");
@@ -398,12 +447,23 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
         venue: useCustom
           ? { kind: "custom", name: customName.trim(), location: customLoc.trim() || null, image_url: customImg.trim() || null }
           : { kind: "existing", venue_id: venueId! },
-        invitees: cleanInvitees,
+        invitees: cleanInvitees.map(({ name, email }) => ({ name, email })),
       },
     });
+    if (!res.ok) {
+      setBusy(false);
+      toast.error(res.error === "private_needs_invitees" ? "Private hangouts need invitees" : "Couldn't create");
+      return;
+    }
+    // Save new contacts the user opted in for
+    const toSave = cleanInvitees.filter((i) => i.save && !contactsByEmail.has(i.email.toLowerCase()));
+    if (toSave.length) {
+      await Promise.allSettled(
+        toSave.map((c) => saveContact({ data: { adminPassword: ADMIN_PASSWORD, name: c.name, email: c.email } })),
+      );
+    }
     setBusy(false);
-    if (!res.ok) { toast.error(res.error === "private_needs_invitees" ? "Private hangouts need invitees" : "Couldn't create"); return; }
-    toast.success(`Created · ${res.invitedCount} invited`);
+    toast.success(`Created · ${res.invitedCount} invited${toSave.length ? ` · ${toSave.length} saved to contacts` : ""}`);
     onCreated();
   }
 
@@ -479,14 +539,33 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
               <div className="font-medium text-primary">Invitees {visibility === "private" && <span className="text-xs text-muted-foreground">(required)</span>}</div>
               <button type="button" onClick={addInvitee} className="text-xs inline-flex items-center gap-1 text-primary hover:underline"><Plus className="size-3.5" /> Add</button>
             </div>
+            <datalist id="nedate-contacts">
+              {contacts.map((c) => <option key={c.id} value={c.email}>{c.name}</option>)}
+            </datalist>
             <div className="space-y-2">
-              {invitees.map((inv, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                  <input value={inv.name} onChange={(e) => updInvitee(i, "name", e.target.value)} className="input" placeholder="Name" />
-                  <input value={inv.email} onChange={(e) => updInvitee(i, "email", e.target.value)} type="email" className="input" placeholder="email@example.com" />
-                  <button type="button" onClick={() => removeInvitee(i)} className="rounded-full p-2 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-4" /></button>
-                </div>
-              ))}
+              {invitees.map((inv, i) => {
+                const emailKey = inv.email.trim().toLowerCase();
+                const inContacts = emailKey ? contactsByEmail.has(emailKey) : false;
+                const validEmail = /\S+@\S+\.\S+/.test(inv.email);
+                const canSave = validEmail && !inContacts && inv.name.trim().length > 0;
+                return (
+                  <div key={i} className="space-y-1.5">
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                      <input value={inv.name} onChange={(e) => updInvitee(i, "name", e.target.value)} className="input" placeholder="Name" />
+                      <input value={inv.email} onChange={(e) => updInvitee(i, "email", e.target.value)} type="email" className="input" placeholder="email@example.com" list="nedate-contacts" />
+                      <button type="button" onClick={() => removeInvitee(i)} className="rounded-full p-2 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-4" /></button>
+                    </div>
+                    {inContacts ? (
+                      <div className="text-[11px] text-muted-foreground pl-1 flex items-center gap-1"><Check className="size-3 text-emerald-600" /> Already in contacts</div>
+                    ) : canSave ? (
+                      <label className="text-[11px] text-muted-foreground pl-1 flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" checked={inv.save} onChange={(e) => updInvitee(i, "save", e.target.checked)} className="size-3.5" />
+                        <UserPlus className="size-3" /> Save to contacts
+                      </label>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -608,3 +687,226 @@ function VenuesTab() {
     </div>
   );
 }
+
+// ===== Contacts tab =====
+function ContactsTab() {
+  const list = useServerFn(listContacts);
+  const add = useServerFn(addContact);
+  const del = useServerFn(deleteContact);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [form, setForm] = useState({ name: "", email: "" });
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    const r = await list({ data: { adminPassword: ADMIN_PASSWORD } });
+    setContacts(r.contacts ?? []);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim() || !/\S+@\S+\.\S+/.test(form.email)) { toast.error("Name and valid email required"); return; }
+    setSaving(true);
+    const res = await add({ data: { adminPassword: ADMIN_PASSWORD, name: form.name.trim(), email: form.email.trim() } });
+    setSaving(false);
+    if (!res.ok) { toast.error("Couldn't add"); return; }
+    toast.success(res.alreadyExists ? "Already in contacts" : "Added");
+    setForm({ name: "", email: "" });
+    load();
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Remove this contact?")) return;
+    await del({ data: { adminPassword: ADMIN_PASSWORD, id } });
+    load();
+  }
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+      <div>
+        <h2 className="font-display text-3xl text-primary mb-6">Contacts <span className="text-muted-foreground text-base">({contacts.length})</span></h2>
+        {contacts.length === 0 ? (
+          <Empty>No contacts yet. Add friends here so you don't have to retype their emails.</Empty>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {contacts.map((c) => (
+              <div key={c.id} className="rounded-2xl bg-card border border-border/60 p-4 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-primary truncate">{c.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{c.email}</div>
+                </div>
+                <button onClick={() => remove(c.id)} className="rounded-full p-1.5 text-muted-foreground hover:text-destructive hover:bg-muted">
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <form onSubmit={submit} className="rounded-3xl bg-card border border-border/60 p-5 h-fit sticky top-6 shadow-soft">
+        <h3 className="font-display text-lg text-primary flex items-center gap-2"><UserPlus className="size-4" /> Add a contact</h3>
+        <label className="block mt-4">
+          <span className="text-xs font-medium text-primary">Name</span>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" />
+        </label>
+        <label className="block mt-3">
+          <span className="text-xs font-medium text-primary">Email</span>
+          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" />
+        </label>
+        <button disabled={saving} className="mt-5 w-full rounded-full bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          {saving ? "Adding…" : "Add contact"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ===== Bulk message modal =====
+function BulkMessageModal({
+  hangout,
+  invitees,
+  joinRequests,
+  onClose,
+}: {
+  hangout: Hangout;
+  invitees: Invitee[];
+  joinRequests: Hangout[];
+  onClose: () => void;
+}) {
+  const send = useServerFn(sendBulkMessage);
+  const [subject, setSubject] = useState(`Update: ${hangout.title ?? "our hangout"}`);
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const inviteeStatusOptions = ["accepted", "maybe", "pending", "declined"] as const;
+  const joinStatusOptions = ["approved", "pending", "rejected"] as const;
+
+  const [inviteeStatuses, setInviteeStatuses] = useState<Set<typeof inviteeStatusOptions[number]>>(
+    new Set(["accepted", "maybe"]),
+  );
+  const [joinStatuses, setJoinStatuses] = useState<Set<typeof joinStatusOptions[number]>>(
+    new Set(["approved"]),
+  );
+
+  function toggleInvitee(s: typeof inviteeStatusOptions[number]) {
+    setInviteeStatuses((prev) => {
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
+  }
+  function toggleJoin(s: typeof joinStatusOptions[number]) {
+    setJoinStatuses((prev) => {
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
+  }
+
+  const inviteeCount = invitees.filter((i) => inviteeStatuses.has(i.response_status as any)).length;
+  const joinCount = joinRequests.filter((j) => joinStatuses.has((j.request_status ?? "pending") as any)).length;
+  const total = inviteeCount + joinCount;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!subject.trim() || !body.trim()) { toast.error("Subject and message required"); return; }
+    if (total === 0) { toast.error("Select at least one recipient group"); return; }
+    setBusy(true);
+    const res = await send({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        hangoutId: hangout.id,
+        subject: subject.trim(),
+        body: body.trim(),
+        inviteeStatuses: Array.from(inviteeStatuses),
+        joinStatuses: Array.from(joinStatuses),
+        includeAttendees: true,
+      },
+    });
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(res.error === "no_recipients" ? "No matching recipients" : "Send failed");
+      return;
+    }
+    toast.success(`Sent to ${res.sent}/${res.total}`);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-xl rounded-3xl bg-card border border-border/60 p-7 shadow-warm max-h-[92vh] overflow-auto">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="font-display text-2xl text-primary flex items-center gap-2"><Mail className="size-5" /> Message attendees</h2>
+            <p className="text-sm text-muted-foreground truncate">{hangout.title}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted"><X className="size-4" /></button>
+        </div>
+
+        <div className="space-y-4">
+          {invitees.length > 0 && (
+            <div className="rounded-2xl border border-border p-4">
+              <div className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Invitees</div>
+              <div className="flex flex-wrap gap-2">
+                {inviteeStatusOptions.map((s) => {
+                  const n = invitees.filter((i) => i.response_status === s).length;
+                  const active = inviteeStatuses.has(s);
+                  return (
+                    <label key={s} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs cursor-pointer ${active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+                      <input type="checkbox" checked={active} onChange={() => toggleInvitee(s)} className="sr-only" />
+                      <span className="capitalize">{s}</span>
+                      <span className="opacity-70">({n})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {joinRequests.length > 0 && (
+            <div className="rounded-2xl border border-border p-4">
+              <div className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Join requests</div>
+              <div className="flex flex-wrap gap-2">
+                {joinStatusOptions.map((s) => {
+                  const n = joinRequests.filter((j) => (j.request_status ?? "pending") === s).length;
+                  const active = joinStatuses.has(s);
+                  return (
+                    <label key={s} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs cursor-pointer ${active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+                      <input type="checkbox" checked={active} onChange={() => toggleJoin(s)} className="sr-only" />
+                      <span className="capitalize">{s}</span>
+                      <span className="opacity-70">({n})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {invitees.length === 0 && joinRequests.length === 0 && (
+            <Empty>No invitees or join requests to message yet.</Empty>
+          )}
+
+          <label className="block">
+            <span className="text-sm font-medium text-primary">Subject</span>
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} className="mt-1.5 w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm outline-none focus:border-primary" />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-primary">Message</span>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={7} className="mt-1.5 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary resize-none" placeholder="Hey everyone, quick update…" />
+          </label>
+
+          <div className="text-xs text-muted-foreground">Will send to <strong className="text-primary">{total}</strong> recipient{total === 1 ? "" : "s"}.</div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-full border border-border px-5 py-2.5 text-sm hover:bg-muted">Cancel</button>
+          <button disabled={busy || total === 0} className="rounded-full bg-primary px-6 py-2.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Send
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+

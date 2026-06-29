@@ -270,3 +270,32 @@ export function sendReconfirmAttendanceEmail(data: {
     html,
   });
 }
+
+export function sendBulkMessageEmail(data: {
+  to: string;
+  recipientName: string;
+  hangoutTitle: string;
+  subject: string;
+  body: string;
+}): SendResult {
+  const paragraphs = data.body
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#222;white-space:pre-wrap;">${esc(p)}</p>`)
+    .join("");
+  const html = wrap(
+    data.subject,
+    `<p style="margin:0 0 14px;font-size:14px;color:#666;">A message from Ned about <strong>${esc(data.hangoutTitle)}</strong></p>
+     <div style="margin-top:6px;background:#F8F5EE;border-radius:16px;padding:18px 20px;">
+       <div style="font-size:13px;color:#666;margin-bottom:10px;">Hi ${esc(data.recipientName)},</div>
+       ${paragraphs}
+       <div style="margin-top:14px;font-size:13px;color:#666;">— Ned</div>
+     </div>`,
+  );
+  return sendViaResend({
+    from: FROM,
+    to: [data.to],
+    bcc: [BCC],
+    subject: data.subject,
+    html,
+  });
+}
