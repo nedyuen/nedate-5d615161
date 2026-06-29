@@ -132,11 +132,9 @@ function RequestPage() {
 
           {step === 3 && (
             <Section title="When?" subtitle="Propose a time. We can always adjust.">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="When" hint="Pick to the nearest 15 minutes.">
-                  <input type="datetime-local" step={900} value={start} onChange={(e) => setStart(e.target.value)} className="input" />
-                </Field>
-              </div>
+              <Field label="When" hint="Pick a date and time (to the nearest 15 minutes).">
+                <DateTimePicker value={start} onChange={setStart} />
+              </Field>
             </Section>
           )}
 

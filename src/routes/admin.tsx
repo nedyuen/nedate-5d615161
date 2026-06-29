@@ -549,7 +549,7 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
           </Field>
 
           <Field label="When" hint="To the nearest 15 minutes.">
-            <input type="datetime-local" step={900} value={start} onChange={(e) => setStart(e.target.value)} className="input" />
+            <DateTimePicker value={start} onChange={setStart} />
           </Field>
 
           <div className="rounded-2xl border border-border p-4">
