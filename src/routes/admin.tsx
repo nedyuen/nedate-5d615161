@@ -208,21 +208,31 @@ function StatusPill({ status }: { status: string }) {
 
 function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangout; invitees: Invitee[]; joinRequests: Hangout[]; onOpenRequest: (h: Hangout) => void }) {
   const [open, setOpen] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const v = venueDisplay(h);
   return (
     <div className="rounded-2xl bg-card border border-border/60 shadow-soft">
-      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-3 p-4 text-left">
-        {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(h.category).emoji} {categoryMeta(h.category).label}</span>
-            <span className={`text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide ${h.visibility === "public" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground"}`}>{h.visibility}</span>
+      <div className="w-full flex items-center gap-3 p-4">
+        <button onClick={() => setOpen(o => !o)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(h.category).emoji} {categoryMeta(h.category).label}</span>
+              <span className={`text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide ${h.visibility === "public" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground"}`}>{h.visibility}</span>
+            </div>
+            <div className="mt-0.5 font-display text-lg text-primary truncate">{h.title}</div>
+            <div className="text-xs text-muted-foreground">{fmtRange(h.start_time)} · {v.name}</div>
           </div>
-          <div className="mt-0.5 font-display text-lg text-primary truncate">{h.title}</div>
-          <div className="text-xs text-muted-foreground">{fmtRange(h.start_time)} · {v.name}</div>
-        </div>
-        <div className="text-xs text-muted-foreground hidden sm:block">{invitees.length} invited{joinRequests.length ? ` · ${joinRequests.length} requests` : ""}</div>
-      </button>
+          <div className="text-xs text-muted-foreground hidden sm:block">{invitees.length} invited{joinRequests.length ? ` · ${joinRequests.length} requests` : ""}</div>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowBulk(true); }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-primary hover:bg-muted"
+          title="Send a message to people in this hangout"
+        >
+          <Mail className="size-3.5" /> Message
+        </button>
+      </div>
       {open && (
         <div className="border-t border-border/60 p-4 space-y-4">
           {h.pitch && <p className="text-sm italic text-muted-foreground">"{h.pitch}"</p>}
@@ -266,6 +276,14 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest }: { h: Hangou
           )}
           <HangoutAgreementPanel actor={{ kind: "admin", adminPassword: ADMIN_PASSWORD, hangoutId: h.id }} />
         </div>
+      )}
+      {showBulk && (
+        <BulkMessageModal
+          hangout={h}
+          invitees={invitees}
+          joinRequests={joinRequests}
+          onClose={() => setShowBulk(false)}
+        />
       )}
     </div>
   );
