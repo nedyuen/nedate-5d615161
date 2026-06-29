@@ -376,6 +376,8 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
 function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const create = useServerFn(createHangout);
   const fetchVenues = useServerFn(adminListVenues);
+  const fetchContacts = useServerFn(listContacts);
+  const saveContact = useServerFn(addContact);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
   const [category, setCategory] = useState<string>(CATEGORIES[0].id);
   const [title, setTitle] = useState("");
@@ -387,7 +389,9 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [customName, setCustomName] = useState("");
   const [customLoc, setCustomLoc] = useState("");
   const [customImg, setCustomImg] = useState("");
-  const [invitees, setInvitees] = useState<{ name: string; email: string }[]>([{ name: "", email: "" }]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  type InviteeDraft = { name: string; email: string; save: boolean };
+  const [invitees, setInvitees] = useState<InviteeDraft[]>([{ name: "", email: "", save: false }]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -396,11 +400,29 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
     });
   }, [category, fetchVenues]);
 
+  useEffect(() => {
+    fetchContacts({ data: { adminPassword: ADMIN_PASSWORD } }).then((r) => setContacts(r.contacts ?? []));
+  }, [fetchContacts]);
 
-  function addInvitee() { setInvitees(v => [...v, { name: "", email: "" }]); }
+  const contactsByEmail = useMemo(
+    () => new Map(contacts.map((c) => [c.email.toLowerCase(), c])),
+    [contacts],
+  );
+
+  function addInvitee() { setInvitees(v => [...v, { name: "", email: "", save: false }]); }
   function removeInvitee(i: number) { setInvitees(v => v.filter((_, ix) => ix !== i)); }
-  function updInvitee(i: number, k: "name" | "email", val: string) {
-    setInvitees(v => v.map((x, ix) => ix === i ? { ...x, [k]: val } : x));
+  function updInvitee(i: number, k: "name" | "email" | "save", val: string | boolean) {
+    setInvitees(v => v.map((x, ix) => {
+      if (ix !== i) return x;
+      const next = { ...x, [k]: val } as InviteeDraft;
+      // If email is changed and matches a contact, auto-fill name
+      if (k === "email" && typeof val === "string") {
+        const match = contactsByEmail.get(val.trim().toLowerCase());
+        if (match && !next.name) next.name = match.name;
+        if (match) next.save = false;
+      }
+      return next;
+    }));
   }
 
   async function submit(e: React.FormEvent) {
@@ -408,7 +430,7 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
     if (!title.trim() || !start) { toast.error("Title and date are required"); return; }
     if (useCustom ? customName.trim().length < 2 : !venueId) { toast.error("Choose or enter a venue"); return; }
     const cleanInvitees = invitees
-      .map(i => ({ name: i.name.trim(), email: i.email.trim() }))
+      .map(i => ({ name: i.name.trim(), email: i.email.trim(), save: i.save }))
       .filter(i => i.name && /\S+@\S+\.\S+/.test(i.email));
     if (visibility === "private" && cleanInvitees.length === 0) {
       toast.error("Private hangouts need at least one invitee");
@@ -425,12 +447,23 @@ function CreateHangoutModal({ onClose, onCreated }: { onClose: () => void; onCre
         venue: useCustom
           ? { kind: "custom", name: customName.trim(), location: customLoc.trim() || null, image_url: customImg.trim() || null }
           : { kind: "existing", venue_id: venueId! },
-        invitees: cleanInvitees,
+        invitees: cleanInvitees.map(({ name, email }) => ({ name, email })),
       },
     });
+    if (!res.ok) {
+      setBusy(false);
+      toast.error(res.error === "private_needs_invitees" ? "Private hangouts need invitees" : "Couldn't create");
+      return;
+    }
+    // Save new contacts the user opted in for
+    const toSave = cleanInvitees.filter((i) => i.save && !contactsByEmail.has(i.email.toLowerCase()));
+    if (toSave.length) {
+      await Promise.allSettled(
+        toSave.map((c) => saveContact({ data: { adminPassword: ADMIN_PASSWORD, name: c.name, email: c.email } })),
+      );
+    }
     setBusy(false);
-    if (!res.ok) { toast.error(res.error === "private_needs_invitees" ? "Private hangouts need invitees" : "Couldn't create"); return; }
-    toast.success(`Created · ${res.invitedCount} invited`);
+    toast.success(`Created · ${res.invitedCount} invited${toSave.length ? ` · ${toSave.length} saved to contacts` : ""}`);
     onCreated();
   }
 
