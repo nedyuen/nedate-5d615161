@@ -11,7 +11,11 @@ import {
   adminListVenues,
   adminAddVenue,
   adminDeleteVenue,
+  adminAddInvitees,
+  adminRemoveInvitee,
+  adminRemoveJoiner,
 } from "@/lib/hangouts.functions";
+
 import {
   listContacts,
   addContact,
