@@ -82,7 +82,7 @@ function AdminPage() {
 }
 
 function AdminInner({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"hangouts" | "venues">("hangouts");
+  const [tab, setTab] = useState<"hangouts" | "venues" | "contacts">("hangouts");
   return (
     <div className="min-h-screen bg-background">
       <header className="px-5 pt-6 sm:px-10">
@@ -91,16 +91,16 @@ function AdminInner({ onLogout }: { onLogout: () => void }) {
           <button onClick={onLogout} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary"><LogOut className="size-4" /> Log out</button>
         </div>
         <div className="mx-auto max-w-6xl mt-8 flex items-center gap-2 border-b border-border/60">
-          {(["hangouts", "venues"] as const).map((t) => (
+          {(["hangouts", "venues", "contacts"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition ${tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"}`}>
-              {t === "hangouts" ? "Hangouts" : "Venues & ideas"}
+              {t === "hangouts" ? "Hangouts" : t === "venues" ? "Venues & ideas" : "Contacts"}
             </button>
           ))}
         </div>
       </header>
       <main className="px-5 py-8 sm:px-10">
         <div className="mx-auto max-w-6xl">
-          {tab === "hangouts" ? <HangoutsTab /> : <VenuesTab />}
+          {tab === "hangouts" ? <HangoutsTab /> : tab === "venues" ? <VenuesTab /> : <ContactsTab />}
         </div>
       </main>
     </div>
