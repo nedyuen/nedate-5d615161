@@ -451,7 +451,8 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         name: z.string().trim().min(2).max(200),
         email: z.string().trim().email().max(255),
         pitch: z.string().trim().min(1).max(4000),
-        start_time: z.string().min(1),
+        schedule_mode: z.enum(["have_time", "flexible"]).default("have_time"),
+        start_time: z.string().min(1).nullable().optional(),
         venue_id: z.string().uuid().nullable(),
         custom_venue_name: z.string().trim().max(300).nullable(),
       })
@@ -461,8 +462,12 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
     if (!data.venue_id && (!data.custom_venue_name || data.custom_venue_name.length < 3)) {
       return { ok: false as const, error: "venue_required" as const };
     }
+    const flexible = data.schedule_mode === "flexible";
+    if (!flexible && !data.start_time) {
+      return { ok: false as const, error: "start_time_required" as const };
+    }
+    const startIso = flexible ? null : new Date(data.start_time!).toISOString();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const startIso = new Date(data.start_time).toISOString();
     const { data: inserted, error } = await supabaseAdmin
       .from("requests")
       .insert({
@@ -471,6 +476,7 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         visibility: "private",
         hangout_status: "active",
         request_status: "pending",
+        schedule_status: flexible ? "unscheduled" : "scheduled",
         category: data.category,
         requester_name: data.name,
         requester_email: data.email,
@@ -523,7 +529,7 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         name: data.name,
         pitch: data.pitch,
         venue: venueText,
-        when: fmtRangeServer(startIso),
+        when: startIso ? fmtRangeServer(startIso) : null,
         trackingUrl: `${getOrigin()}/r/${inserted.slug}`,
       });
     } catch (e) {
