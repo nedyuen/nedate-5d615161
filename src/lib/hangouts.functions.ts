@@ -199,7 +199,7 @@ export const getInviteByToken = createServerFn({ method: "GET" })
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, slug, category, title, pitch, start_time, hangout_status, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+        "id, slug, category, title, pitch, start_time, hangout_status, cancelled_at, cancellation_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
       )
       .eq("id", invite.hangout_id)
       .maybeSingle();
