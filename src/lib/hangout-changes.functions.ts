@@ -4,6 +4,7 @@ import {
   sendChangeProposedEmail,
   sendChangeDecisionEmail,
   sendReconfirmAttendanceEmail,
+  sendTimeSuggestedEmail,
 } from "./email.server";
 
 const SLUG_RE = /^[a-z0-9]{8,32}$/i;
@@ -239,7 +240,7 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, title, pitch, start_time, end_time, hangout_status, visibility, hangout_kind, category, venue_id, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location)",
+        "id, title, pitch, start_time, end_time, hangout_status, visibility, hangout_kind, category, request_status, schedule_status, venue_id, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location)",
       )
       .eq("id", viewer.hangout_id)
       .maybeSingle();
@@ -249,9 +250,24 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     }
     // Any active participant may propose changes in any hangout kind.
 
+    // Initial-scheduling gate for unscheduled friend requests.
+    const isUnscheduledInit =
+      hangout.hangout_kind === "friend_request" && hangout.schedule_status === "unscheduled";
+    if (isUnscheduledInit) {
+      if (hangout.request_status !== "approved") {
+        return { ok: false as const, error: "not_approved_yet" as const };
+      }
+      if (viewer.type !== "ned") {
+        return { ok: false as const, error: "unscheduled_ned_only" as const };
+      }
+      const allowed = new Set(["start_time", "end_time"]);
+      const bad = Object.keys(data.changes).some((k) => !allowed.has(k));
+      if (bad || !data.changes.start_time) {
+        return { ok: false as const, error: "unscheduled_time_only" as const };
+      }
+    }
 
-
-    // Existing pending check
+    // Existing pending check (one pending proposal at a time; applies to initial suggestions too).
     const { data: existing } = await supabaseAdmin
       .from("hangout_change_requests")
       .select("id")
@@ -341,9 +357,31 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     });
     const proposerName = viewer.display_name ?? (viewer.type === "ned" ? "Ned" : "Someone");
     const hangoutTitle = hangout.title ?? hangout.pitch ?? "Your hangout";
+
+    // Venue label for the "Suggest a time" email
+    const currentVenueLabel = (hangout as any).venue
+      ? `${(hangout as any).venue.name}${(hangout as any).venue.location ? ` · ${(hangout as any).venue.location}` : ""}`
+      : hangout.custom_venue_name
+        ? `${hangout.custom_venue_name}${hangout.custom_venue_location ? ` · ${hangout.custom_venue_location}` : ""}`
+        : "TBD";
+
     await Promise.allSettled(
       (others ?? []).map((p: any) => {
         if (!p.email) return Promise.resolve();
+        if (isUnscheduledInit) {
+          // Exclusive path: send the "Ned suggested a time" email, not the generic proposal email.
+          return sendTimeSuggestedEmail({
+            to: p.email,
+            recipientName: p.display_name ?? "there",
+            hangoutTitle,
+            venue: currentVenueLabel,
+            suggestedWhen: newSnapshot.start_time
+              ? new Date(newSnapshot.start_time).toLocaleString("en-GB", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Europe/London" })
+              : "TBD",
+            comment: data.comment ?? null,
+            actionUrl: participantUrl(p),
+          });
+        }
         return sendChangeProposedEmail({
           to: p.email,
           recipientName: p.display_name ?? "there",
@@ -396,7 +434,7 @@ export const respondToHangoutChange = createServerFn({ method: "POST" })
     // - public / private: only Ned is the final approver
     const { data: hangoutRow } = await supabaseAdmin
       .from("requests")
-      .select("hangout_kind, hangout_status")
+      .select("hangout_kind, hangout_status, schedule_status")
       .eq("id", proposal.hangout_id)
       .maybeSingle();
     if (!hangoutRow || hangoutRow.hangout_status !== "active") {
@@ -433,7 +471,13 @@ export const respondToHangoutChange = createServerFn({ method: "POST" })
       for (const k of MUTABLE_KEYS) {
         if (k in newSnap) updatePayload[k] = newSnap[k];
       }
+      // Flip schedule_status when an unscheduled friend request gets its first time.
+      if ((hangoutRow as any)?.schedule_status === "unscheduled" && newSnap.start_time) {
+        updatePayload.schedule_status = "scheduled";
+      }
       updatePayload.updated_at = new Date().toISOString();
+
+
 
       const { error: upErr } = await (supabaseAdmin as any)
         .from("requests")

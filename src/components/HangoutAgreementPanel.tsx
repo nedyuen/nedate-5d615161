@@ -47,22 +47,34 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
   const kind = (hangout as any).hangout_kind ?? "friend_request";
   const isFriendRequest = kind === "friend_request";
   const nedApprovesOnly = !isFriendRequest;
+  const isUnscheduled = (hangout as any).schedule_status === "unscheduled";
   const canRespond = !!pendingProposal && (
     nedApprovesOnly ? viewer.type === "ned" : !isProposer
   );
   const v = venueDisplay(hangout as any);
   const terminal = hangout.hangout_status === "cancelled" || hangout.hangout_status === "completed";
-  const canPropose = !terminal && !pendingProposal;
+  // In the "awaiting time" state only Ned may propose (and only once the request is approved).
+  const requestApproved = ((hangout as any).request_status ?? "pending") === "approved";
+  const canPropose =
+    !terminal &&
+    !pendingProposal &&
+    (isUnscheduled
+      ? viewer.type === "ned" && requestApproved
+      : true);
 
-  const subtitle = isFriendRequest
-    ? "changes require the other side to accept"
-    : "any participant can propose · Ned approves";
+  const subtitle = isUnscheduled
+    ? "awaiting a time from Ned"
+    : isFriendRequest
+      ? "changes require the other side to accept"
+      : "any participant can propose · Ned approves";
+
+  const proposeLabel = isUnscheduled ? "Suggest a time" : "Propose changes";
 
   return (
     <div className="mt-8 rounded-3xl border border-border/60 bg-card shadow-soft overflow-hidden">
       <div className="px-6 pt-5 pb-3 flex items-center justify-between">
         <div>
-          <h2 className="font-display text-xl text-primary">The agreement</h2>
+          <h2 className="font-display text-xl text-primary">{isUnscheduled ? "Scheduling" : "The agreement"}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {participants.length} participant{participants.length === 1 ? "" : "s"} · {subtitle}
           </p>
@@ -72,7 +84,7 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
             onClick={() => setProposing(true)}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
-            <Pencil className="size-3.5" /> Propose changes
+            <Pencil className="size-3.5" /> {proposeLabel}
           </button>
         )}
       </div>
@@ -144,6 +156,7 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
         <ProposeDialog
           actor={actor}
           current={hangout}
+          timeOnly={isUnscheduled}
           onClose={() => setProposing(false)}
           onSubmitted={() => { setProposing(false); reload(); }}
         />
@@ -155,10 +168,12 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
 function DiffList({ oldSnap, newSnap }: { oldSnap: any; newSnap: any }) {
   const rows: { label: string; from: string; to: string }[] = [];
   if ("start_time" in newSnap || "end_time" in newSnap) {
+    const fromStart = oldSnap.start_time ?? null;
+    const toStart = newSnap.start_time ?? oldSnap.start_time ?? null;
     rows.push({
       label: "When",
-      from: fmtRange(oldSnap.start_time ?? "", oldSnap.end_time),
-      to: fmtRange(newSnap.start_time ?? oldSnap.start_time ?? "", newSnap.end_time ?? oldSnap.end_time),
+      from: fromStart ? fmtRange(fromStart, oldSnap.end_time) : "Not decided yet",
+      to: toStart ? fmtRange(toStart, newSnap.end_time ?? oldSnap.end_time) : "Not decided yet",
     });
   }
   if ("custom_venue_name" in newSnap || "venue_id" in newSnap) {
@@ -303,11 +318,13 @@ function toLocalInput(iso: string | null | undefined): string {
 function ProposeDialog({
   actor,
   current,
+  timeOnly = false,
   onClose,
   onSubmitted,
 }: {
   actor: Actor;
   current: any;
+  timeOnly?: boolean;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
@@ -328,14 +345,20 @@ function ProposeDialog({
 
   async function submit() {
     const changes: any = {};
-    if (start !== origStart) changes.start_time = londonLocalToIso(start);
-    if (end !== origEnd) changes.end_time = end ? londonLocalToIso(end) : null;
-    if (title !== (current.title ?? "")) changes.title = title;
-    if (pitch !== (current.pitch ?? "")) changes.pitch = pitch || null;
-    if (venueName !== origVenueName || venueLoc !== origVenueLoc) {
-      changes.venue_id = null;
-      changes.custom_venue_name = venueName || null;
-      changes.custom_venue_location = venueLoc || null;
+    if (timeOnly) {
+      if (!start) { toast.error("Pick a date and time"); return; }
+      changes.start_time = londonLocalToIso(start);
+      if (end !== origEnd) changes.end_time = end ? londonLocalToIso(end) : null;
+    } else {
+      if (start !== origStart) changes.start_time = londonLocalToIso(start);
+      if (end !== origEnd) changes.end_time = end ? londonLocalToIso(end) : null;
+      if (title !== (current.title ?? "")) changes.title = title;
+      if (pitch !== (current.pitch ?? "")) changes.pitch = pitch || null;
+      if (venueName !== origVenueName || venueLoc !== origVenueLoc) {
+        changes.venue_id = null;
+        changes.custom_venue_name = venueName || null;
+        changes.custom_venue_location = venueLoc || null;
+      }
     }
     if (Object.keys(changes).length === 0) { toast.error("Nothing changed"); return; }
     setBusy(true);
@@ -347,11 +370,14 @@ function ProposeDialog({
         err === "pending_exists" ? "Another proposal is already pending" :
         err === "no_changes" ? "Nothing changed" :
         err === "hangout_terminal" ? "Hangout is closed" :
+        err === "not_approved_yet" ? "Approve the request first" :
+        err === "unscheduled_ned_only" ? "Only Ned can suggest the first time" :
+        err === "unscheduled_time_only" ? "Only time can be suggested here" :
         "Couldn't submit proposal",
       );
       return;
     }
-    toast.success("Proposal sent");
+    toast.success(timeOnly ? "Time suggested" : "Proposal sent");
     onSubmitted();
   }
 
@@ -359,10 +385,16 @@ function ProposeDialog({
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-3xl bg-card border border-border/60 p-6 shadow-warm max-h-[90vh] overflow-auto">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="font-display text-xl text-primary">Propose changes</h3>
+          <h3 className="font-display text-xl text-primary">{timeOnly ? "Suggest a time" : "Propose changes"}</h3>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-muted"><X className="size-4" /></button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">{current.hangout_kind === "friend_request" ? "The other side must accept before changes apply." : "Ned reviews and approves all change proposals. If the time changes, attendees will be asked to reconfirm attendance."}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {timeOnly
+            ? "Pick a date and time. The requester will accept or reject your suggestion — venue stays as agreed."
+            : current.hangout_kind === "friend_request"
+              ? "The other side must accept before changes apply."
+              : "Ned reviews and approves all change proposals. If the time changes, attendees will be asked to reconfirm attendance."}
+        </p>
 
         <div className="mt-4 grid gap-3 text-sm">
           <label className="grid gap-1">
@@ -373,32 +405,36 @@ function ProposeDialog({
             <span className="text-xs font-medium text-primary">End (optional)</span>
             <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary" />
           </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-primary">Venue name</span>
-            <input value={venueName} onChange={(e) => setVenueName(e.target.value)} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary" />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-primary">Venue location</span>
-            <input value={venueLoc} onChange={(e) => setVenueLoc(e.target.value)} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary" />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-primary">Title</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary" />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-primary">Pitch</span>
-            <textarea value={pitch} onChange={(e) => setPitch(e.target.value)} rows={3} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary resize-none" />
-          </label>
+          {!timeOnly && (
+            <>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-primary">Venue name</span>
+                <input value={venueName} onChange={(e) => setVenueName(e.target.value)} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary" />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-primary">Venue location</span>
+                <input value={venueLoc} onChange={(e) => setVenueLoc(e.target.value)} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary" />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-primary">Title</span>
+                <input value={title} onChange={(e) => setTitle(e.target.value)} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary" />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-primary">Pitch</span>
+                <textarea value={pitch} onChange={(e) => setPitch(e.target.value)} rows={3} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary resize-none" />
+              </label>
+            </>
+          )}
           <label className="grid gap-1">
             <span className="text-xs font-medium text-primary">Note (optional)</span>
-            <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Why this change?" className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary resize-none" />
+            <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder={timeOnly ? "Anything you want the requester to know?" : "Why this change?"} className="rounded-xl border border-input bg-background px-3 py-2 outline-none focus:border-primary resize-none" />
           </label>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-full border border-border bg-card px-4 py-2 text-sm hover:bg-muted">Cancel</button>
           <button disabled={busy} onClick={submit} className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Send proposal
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} {timeOnly ? "Send suggestion" : "Send proposal"}
           </button>
         </div>
       </div>

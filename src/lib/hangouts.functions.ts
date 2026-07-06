@@ -30,7 +30,8 @@ function assertAdmin(pw: string) {
 const SLUG_RE = /^[a-z0-9]{8,32}$/i;
 
 const TZ = "Europe/London";
-function fmtRangeServer(start: string) {
+function fmtRangeServer(start: string | null | undefined) {
+  if (!start) return "To be decided — Ned will suggest a time";
   const s = new Date(start);
   return `${s.toLocaleDateString("en-GB", { weekday: "short", month: "short", day: "numeric", timeZone: TZ })} · ${s.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", timeZone: TZ })}`;
 }
@@ -450,7 +451,8 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         name: z.string().trim().min(2).max(200),
         email: z.string().trim().email().max(255),
         pitch: z.string().trim().min(1).max(4000),
-        start_time: z.string().min(1),
+        schedule_mode: z.enum(["have_time", "flexible"]).default("have_time"),
+        start_time: z.string().min(1).nullable().optional(),
         venue_id: z.string().uuid().nullable(),
         custom_venue_name: z.string().trim().max(300).nullable(),
       })
@@ -460,8 +462,12 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
     if (!data.venue_id && (!data.custom_venue_name || data.custom_venue_name.length < 3)) {
       return { ok: false as const, error: "venue_required" as const };
     }
+    const flexible = data.schedule_mode === "flexible";
+    if (!flexible && !data.start_time) {
+      return { ok: false as const, error: "start_time_required" as const };
+    }
+    const startIso = flexible ? null : new Date(data.start_time!).toISOString();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const startIso = new Date(data.start_time).toISOString();
     const { data: inserted, error } = await supabaseAdmin
       .from("requests")
       .insert({
@@ -470,6 +476,7 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         visibility: "private",
         hangout_status: "active",
         request_status: "pending",
+        schedule_status: flexible ? "unscheduled" : "scheduled",
         category: data.category,
         requester_name: data.name,
         requester_email: data.email,
@@ -522,7 +529,7 @@ export const submitFriendRequest = createServerFn({ method: "POST" })
         name: data.name,
         pitch: data.pitch,
         venue: venueText,
-        when: fmtRangeServer(startIso),
+        when: startIso ? fmtRangeServer(startIso) : null,
         trackingUrl: `${getOrigin()}/r/${inserted.slug}`,
       });
     } catch (e) {
@@ -539,7 +546,7 @@ export const getRequestTracking = createServerFn({ method: "GET" })
     const { data: row, error } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, slug, category, requester_name, pitch, start_time, end_time, request_status, hangout_kind, hangout_status, admin_comment, cancelled_at, cancellation_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, parent_hangout_id, request_message, venue:venues(name, location, image_url)",
+        "id, slug, category, requester_name, pitch, start_time, end_time, request_status, hangout_kind, hangout_status, schedule_status, admin_comment, cancelled_at, cancellation_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, parent_hangout_id, request_message, venue:venues(name, location, image_url)",
       )
       .eq("slug", data.slug)
       .maybeSingle();

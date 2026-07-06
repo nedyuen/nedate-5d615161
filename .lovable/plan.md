@@ -1,95 +1,143 @@
-## Person History (Relationship Timeline) — v1
+## Undated Friend Requests — "Let Ned pick a time" (v1)
 
-Read-only admin feature showing every hangout tied to one person, identified by normalized email. No new tables. No changes to existing flows, writes, or permissions.
+Allow a `friend_request` to be submitted without `start_time`. Ned proposes a time via the **existing** change-proposal workflow. Public/private hangouts and invitations are unchanged.
 
-### 1. Identity helper
-
-Add a shared helper in `src/lib/nedate.ts`:
+### 1. Scheduling state model
 
 ```
-normalizeEmail(email): string | null   // trim + lowercase, returns null if empty
-displayNameFor(name, email): string    // name if non-empty, else email local-part
+REQUESTED (request_status='pending', schedule_status='unscheduled')
+  → Ned approves interest   → APPROVED BUT AWAITING TIME
+                              (request_status='approved',
+                               schedule_status='unscheduled')
+  → Ned suggests a time     → pending proposal
+  → Requester accepts       → SCHEDULED
+  → Requester rejects       → back to AWAITING TIME (nothing else changes)
 ```
 
-All matching/display logic uses these — no duplicated trim/lowercase.
+`schedule_status` documents only whether a date/time is confirmed. It does NOT represent approval, attendance, or existence.
 
-### 2. Server — `src/lib/hangouts.functions.ts`
+### 2. Migration (`public.requests`) — safe rollout
 
-Both new functions are admin-only (`assertAdmin`), use `supabaseAdmin`, and never mutate.
+Ordering inside the single migration file:
 
-**`listPeople({ adminPassword })`**
-- Read `hangout_participants` where `email is not null and email <> ''`.
-- Group in JS by `normalizeEmail(email)`; ignore null results.
-- Per group:
-  - `display_name`: most recent non-empty `display_name` by `updated_at`, else `null`. UI applies `displayNameFor`.
-  - Distinct `hangout_id` set.
-- Join `requests` for those hangout ids and compute:
-  - `total`, `completed`, `cancelled`, `upcoming` (`hangout_status='active' AND start_time >= now()`).
-  - `latest_hangout_record`: newest by `start_time` (fallback `created_at`) regardless of status → `{ id, title, venue_name, start_time, hangout_status, category }`.
-  - `last_completed_hangout`: newest `hangout_status='completed'` or `null`.
-- Sort people by `latest_hangout_record` time desc.
+1. `ADD COLUMN schedule_status text NOT NULL DEFAULT 'scheduled'` + column comment.
+2. `ALTER COLUMN start_time DROP NOT NULL`.
+3. **Pre-constraint validation** (fail-fast): a `DO $$ ... $$` block that raises when either
+   `EXISTS (SELECT 1 FROM public.requests WHERE schedule_status <> 'scheduled')` or
+   `EXISTS (SELECT 1 FROM public.requests WHERE schedule_status='unscheduled' AND hangout_kind <> 'friend_request')`.
+   This proves every existing row will satisfy the new rules before the constraints exist. If any historical row violates them, the migration aborts before mutating structure and the user can review.
+4. `CHECK (schedule_status in ('scheduled','unscheduled'))`.
+5. `CHECK (schedule_status='scheduled' OR hangout_kind='friend_request')` — only friend requests may be unscheduled.
+6. Sanity trigger: `schedule_status='scheduled' ⇒ start_time is not null` (trigger, not CHECK, to allow future extensions).
 
-**`getPersonHistory({ email, adminPassword })`**
-- Normalize input email.
-- Fetch matching `hangout_participants` (active + inactive).
-- Collapse to one entry per `hangout_id`:
-  - Prefer `is_active=true` row.
-  - Else most recent by `updated_at`.
-  - Keep that row's `type` (role: requester/invitee/attendee) and `role_source` (friend_request/invite/join_request).
-- Fetch parent `requests` joined with `venues` for that id set.
-- Fetch `hangout_change_requests` for that id set; group in JS:
-  - `changes: { pending, approved, rejected, total, latest_resolved: { status, responded_at } | null }`.
-- Return `{ person: { email, display_name }, hangouts: [...] }`.
-- Sort hangouts by `start_time` desc, fallback `created_at` desc when `start_time` null.
-- Each item: `{ id, title, hangout_kind, visibility, category, start_time, end_time, venue: { name, location, image_url }, hangout_status, cancelled_at, cancellation_comment, role, source, created_at, changes }`.
+Because default is `'scheduled'`, all existing rows are trivially valid — the validation block just guarantees no drift from earlier data edits.
 
-### 3. Admin UI — `src/routes/admin.tsx`
+### 3. Server — `src/lib/hangouts.functions.ts`
 
-Add a **"People"** tab alongside existing admin tabs.
+**`submitFriendRequest`**
+- Adds `schedule_mode: 'have_time' | 'flexible'`; `start_time` nullable.
+  - `have_time` → require `start_time`; insert `schedule_status='scheduled'`.
+  - `flexible` → force `start_time=null`; insert `schedule_status='unscheduled'`.
+- Venue required in both modes.
+- Confirmation email: `sendRequestConfirmationEmail` with `when=null` in the flexible case → *"Ned will suggest a date/time soon."*
 
-**People list**
-- Loads `listPeople` on tab open.
-- Client-side substring search over name + email.
-- Card per person:
-  ```
-  Alice Smith
-  alice@example.com
-  5 hangouts · 3 completed · 1 cancelled · 1 upcoming
-  Latest: 🎢 Thorpe Park — 12 Feb 2026 (Upcoming)
-  Last completed: ☕ Coffee — 3 Jan 2026
-  [View history]
-  ```
-- Sorted by latest activity desc.
+**`getRequestTracking`**: return `schedule_status`.
 
-**Person History modal**
-- Header: display name + email.
-- Summary cards: Total · Completed · Upcoming · Cancelled · Latest hangout · Last completed.
-- Timeline grouped by month (newest first). Per item:
-  - Category emoji + title, status pill.
-  - Role + source badges (e.g. "Invitee · via invite").
-  - Venue + formatted date range.
-  - Change summary when `changes.total > 0`: `2 pending · 3 resolved · latest approved 12 Feb`. No full diff/history in v1.
-  - Cancellation note if cancelled.
-  - Click → switch to Hangouts tab, `location.hash = 'hangout-<id>'`, scroll to `#hangout-<id>`.
+### 4. Server — `src/lib/hangout-changes.functions.ts`
 
-**Hangout rows in Hangouts tab**
-- Add stable `id="hangout-<id>"` attribute on each existing hangout row (no visual changes).
+**Initial-scheduling gate** in `proposeHangoutChange`, applied when parent `hangout_kind='friend_request'` AND `schedule_status='unscheduled'`:
 
-### 4. Rules
+1. Reject `not_approved_yet` if `request_status !== 'approved'`.
+2. Reject `unscheduled_ned_only` if actor is not Ned.
+3. Reject `unscheduled_time_only` if `changes` touches any non-time field (venue or otherwise).
+4. Existing pending-check enforces "one pending suggestion at a time".
 
-- Match key everywhere: `normalizeEmail(email)`. Never name.
-- Null/empty emails excluded from People list.
-- One timeline entry per `hangout_id`, even with multiple participant rows.
-- Display name is derived at render (`displayNameFor`); no writes back.
-- Read-only end-to-end.
+**Snapshot/diff behaviour (initial suggestion):**
+- `old_snapshot.start_time = null` (parent value at time of proposal).
+- `old_snapshot.end_time = null` when parent has none.
+- `new_snapshot.start_time = <Ned's suggested ISO time>` (and `end_time` if provided).
+- No venue keys in either snapshot for this path.
+- The diff renderer in `HangoutAgreementPanel` must treat `old_snapshot.start_time === null` as **"Not decided yet"**, not "missing" — output reads `Not decided yet → Fri 7 Feb · 7:00pm`.
 
-### 5. Out of scope
+**First-suggestion email path:** send **only** `sendTimeSuggestedEmail`; do NOT also send the generic change-proposal email. All other emails unchanged.
 
-- No new tables (`contacts` untouched — invite address book).
-- No participant/permission changes, no email sends, no writes.
-- No relationship notes/preferences/favourites — future work.
+**`respondToHangoutChange` (apply path)**:
+- Approve with a non-null `start_time` in new snapshot on an unscheduled parent → set `schedule_status='scheduled'` in the same UPDATE.
+- Reject on an unscheduled parent → nothing changes on the parent (no cancellation, no request_status change). Ned may suggest again.
+
+### 5. Null-safety audit for `start_time`
+
+Since `start_time` is now nullable, every reader/formatter must be null-safe. Scheduled rows keep exact current behaviour.
+
+Adjustments:
+- `src/lib/nedate.ts` — add `fmtRangeOrPending(start, end)` returning "Not decided yet" for null; undated-capable surfaces switch to it.
+- `src/lib/hangouts.functions.ts` — server-side formatter tolerates null for the flexible confirmation email.
+- Route/component readers audited: `src/routes/index.tsx`, `src/routes/admin.tsx` (RequestGrid, NedHangoutRow, RequestModal, People views), `src/routes/r.$slug.tsx`, `src/routes/i.$slug.tsx`, `src/routes/join.$slug.tsx`, `src/components/HangoutAgreementPanel.tsx`.
+- Email helpers/templates: `sendRequestConfirmationEmail` accepts `when: string | null`; other templates guard formatters where reachable by undated rows.
+- Sorting: DB `.order('start_time')` unchanged; UI grouping falls back to `created_at` for null (already the People-view convention).
+
+### 6. Friend request form — `src/routes/request.tsx`
+
+Step 3 gains a radio at the top:
+- `( ) I have a date/time in mind` → shows `DateTimePicker`.
+- `( ) I'm flexible — let Ned suggest a time` → hides picker; helper text.
+- `canNext()` step 3: `mode==='have_time' ? !!start : true`.
+- Submit sends `schedule_mode` + `start_time` (or null).
+
+### 7. Requester tracking page — `src/routes/r.$slug.tsx`
+
+- Unscheduled + no pending → date line "Not decided yet" + banner "Waiting for Ned to suggest a time."
+- Copy uses "Awaiting time", never the raw `unscheduled` value.
+- `HangoutAgreementPanel` provides accept/reject when Ned suggests.
+
+### 8. `HangoutAgreementPanel` — `src/components/HangoutAgreementPanel.tsx`
+
+Branch on `hangout.schedule_status`:
+- `unscheduled`:
+  - Ned/admin: propose button labelled **"Suggest a time"**; form restricted to time fields; venue hidden.
+  - Requester: propose button hidden; accept/reject only. Rejection returns to empty state.
+  - Diff view renders `old_snapshot.start_time === null` as **"Not decided yet"**.
+- `scheduled`: existing **"Propose changes"** wording, full field set, unchanged.
+
+### 9. Admin — `src/routes/admin.tsx`
+
+- Extend `Hangout` type with `schedule_status`.
+- `RequestGrid` friend-request cards: unscheduled → "Awaiting time" pill + "Not decided yet" in the date slot.
+- `RequestModal` for friend requests: "When: Not decided yet" when unscheduled; mount `HangoutAgreementPanel` inside the modal (admin actor). "Suggest a time" surfaces only once the request is approved (server enforces).
+- Approving a friend request while unscheduled is allowed.
+
+### 10. Emails — `src/lib/email.server.ts`
+
+- `sendRequestConfirmationEmail`: accepts `when: string | null`; renders placeholder when null.
+- New `sendTimeSuggestedEmail`: subject *"Ned suggested a time for your hangout"*, includes proposed time, existing venue, Accept/Reject CTA.
+- First-suggestion path sends this email **exclusively** — no generic proposal email.
+
+### 11. Types
+
+Auto-regenerated after migration approval — `schedule_status` present, `start_time` nullable.
+
+### 12. Acceptance checks
+
+- Flexible friend request submitted → `start_time=null`, `schedule_status='unscheduled'`, `request_status='pending'`; confirmation email says a time will be suggested.
+- Ned tries to suggest before approval → server `not_approved_yet`; UI hides suggest button.
+- Ned approves → `request_status='approved'`, `schedule_status='unscheduled'` (approved but awaiting time).
+- Ned suggests a time → proposal snapshot: `old.start_time=null`, `new.start_time=<iso>`; diff renders "Not decided yet → …"; requester receives only `sendTimeSuggestedEmail`.
+- Requester accepts → `start_time` set, `schedule_status='scheduled'`.
+- Requester rejects → proposal `rejected`; parent unchanged; Ned can suggest again.
+- Requester attempts to propose while unscheduled → server `unscheduled_ned_only`; UI hides.
+- Ned includes venue in initial suggestion → server `unscheduled_time_only`; UI hides venue fields.
+- Public/private and existing scheduled friend requests behave exactly as before.
+- Non-friend-request rows cannot be `unscheduled` (DB CHECK).
+- Migration aborts safely if any historical row would violate the new constraints (validation block).
 
 ### Files touched
-- `src/lib/nedate.ts` — add `normalizeEmail`, `displayNameFor`.
-- `src/lib/hangouts.functions.ts` — add `listPeople`, `getPersonHistory`.
-- `src/routes/admin.tsx` — add People tab, list, Person History modal, `id="hangout-<id>"` anchors.
+
+- New migration: `schedule_status` + column comment, pre-check validation block, kind CHECK, `start_time` nullable, sanity trigger.
+- `src/lib/hangouts.functions.ts` — `submitFriendRequest`, `getRequestTracking`.
+- `src/lib/hangout-changes.functions.ts` — gates, exclusive first-suggestion email, apply-path flip, snapshot rules.
+- `src/lib/email.server.ts` — nullable `when`, new `sendTimeSuggestedEmail`.
+- `src/lib/nedate.ts` — `fmtRangeOrPending`.
+- `src/routes/request.tsx` — mode radio + conditional picker.
+- `src/routes/r.$slug.tsx` — "Awaiting time" banner + "Not decided" line.
+- `src/routes/admin.tsx` — undated rendering + `HangoutAgreementPanel` in `RequestModal` + null-safe formatting.
+- `src/components/HangoutAgreementPanel.tsx` — wording swap, hide propose for non-Ned, hide venue when unscheduled, null-safe diff rendering.

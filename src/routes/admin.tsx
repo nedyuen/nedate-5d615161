@@ -41,10 +41,11 @@ type Hangout = {
   id: string; slug: string; category: string;
   hangout_kind: string; initiator: string; visibility: string;
   hangout_status: string; request_status: string | null;
+  schedule_status?: string | null;
   title: string | null; pitch: string | null;
   requester_name: string | null; requester_email: string | null;
   request_message: string | null;
-  start_time: string; end_time: string | null;
+  start_time: string | null; end_time: string | null;
   admin_comment: string | null;
   cancelled_at: string | null; cancelled_by: string | null; cancellation_comment: string | null;
   parent_hangout_id: string | null;
@@ -199,19 +200,21 @@ function RequestGrid({ items, onOpen, parentLookup }: { items: Hangout[]; onOpen
       {items.map((r) => {
         const parent = r.parent_hangout_id ? parentLookup?.[r.parent_hangout_id] : null;
         const isCancelled = r.hangout_status === "cancelled";
+        const isUnscheduled = r.schedule_status === "unscheduled";
         return (
           <button key={r.id} onClick={() => onOpen(r)} className={`text-left rounded-2xl bg-card border border-border/60 p-5 shadow-soft hover:border-primary/40 transition ${isCancelled ? "opacity-70" : ""}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(r.category).emoji} {categoryMeta(r.category).label}</span>
               <div className="flex items-center gap-1.5">
                 {isCancelled && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-red-100 text-red-800 font-medium">Cancelled</span>}
+                {isUnscheduled && !isCancelled && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-accent/40 text-primary font-medium">Awaiting time</span>}
                 <StatusPill status={r.request_status ?? "pending"} />
               </div>
             </div>
             <div className={`mt-2 font-display text-lg text-primary ${isCancelled ? "line-through" : ""}`}>{r.requester_name}</div>
             {parent && <div className="text-xs text-muted-foreground">↳ joining: {parent.title ?? "your hangout"}</div>}
             <div className="text-sm text-muted-foreground line-clamp-2 mt-0.5">"{r.request_message ?? r.pitch}"</div>
-            <div className="mt-3 text-xs text-muted-foreground">{fmtRange(r.start_time, r.end_time)}</div>
+            <div className="mt-3 text-xs text-muted-foreground">{isUnscheduled ? "Not decided yet" : fmtRange(r.start_time, r.end_time)}</div>
           </button>
         );
       })}
@@ -433,7 +436,7 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
         </div>
 
         <div className="mt-4 grid gap-2 text-sm">
-          <div><span className="text-muted-foreground">When: </span>{fmtRange(req.start_time, req.end_time)}</div>
+          <div><span className="text-muted-foreground">When: </span>{req.schedule_status === "unscheduled" ? "Not decided yet" : fmtRange(req.start_time, req.end_time)}</div>
           <div><span className="text-muted-foreground">Where: </span>{v.name}{v.location ? ` · ${v.location}` : ""}</div>
           <div>
             <span className="text-muted-foreground">Status: </span>

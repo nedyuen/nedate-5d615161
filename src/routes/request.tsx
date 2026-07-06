@@ -28,6 +28,7 @@ function RequestPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pitch, setPitch] = useState("");
+  const [scheduleMode, setScheduleMode] = useState<"have_time" | "flexible">("have_time");
   const [start, setStart] = useState("");
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venueId, setVenueId] = useState<string | null>(venue ?? null);
@@ -48,7 +49,7 @@ function RequestPage() {
   const canNext = () => {
     if (step === 1) return !!category;
     if (step === 2) return name.trim().length >= 2 && /\S+@\S+\.\S+/.test(email) && pitch.trim().length >= 10;
-    if (step === 3) return !!start;
+    if (step === 3) return scheduleMode === "flexible" ? true : !!start;
     return false;
   };
 
@@ -64,7 +65,8 @@ function RequestPage() {
         name,
         email,
         pitch,
-        start_time: londonLocalToIso(start),
+        schedule_mode: scheduleMode,
+        start_time: scheduleMode === "flexible" ? null : londonLocalToIso(start),
         venue_id: venueId,
         custom_venue_name: venueId ? null : customVenue.trim(),
       },
@@ -132,10 +134,36 @@ function RequestPage() {
           )}
 
           {step === 3 && (
-            <Section title="When?" subtitle="Propose a time. We can always adjust.">
-              <Field label="When" hint="Pick a date and time (to the nearest 15 minutes).">
-                <DateTimePicker value={start} onChange={setStart} />
-              </Field>
+            <Section title="When?" subtitle="Have a time in mind, or leave it to Ned.">
+              <div className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMode("have_time")}
+                    className={`rounded-2xl border p-4 text-left transition ${scheduleMode === "have_time" ? "border-primary ring-2 ring-primary/30 bg-primary/5" : "border-border/60 hover:border-primary/40"}`}
+                  >
+                    <div className="font-medium text-primary">I have a date/time in mind</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Pick a specific slot below.</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMode("flexible")}
+                    className={`rounded-2xl border p-4 text-left transition ${scheduleMode === "flexible" ? "border-primary ring-2 ring-primary/30 bg-primary/5" : "border-border/60 hover:border-primary/40"}`}
+                  >
+                    <div className="font-medium text-primary">I'm flexible — let Ned suggest a time</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Ned will propose something after reviewing.</div>
+                  </button>
+                </div>
+                {scheduleMode === "have_time" ? (
+                  <Field label="When" hint="Pick a date and time (to the nearest 15 minutes).">
+                    <DateTimePicker value={start} onChange={setStart} />
+                  </Field>
+                ) : (
+                  <div className="rounded-2xl bg-accent/15 border border-accent/30 p-4 text-sm text-primary">
+                    Ned will suggest a time after reviewing your request.
+                  </div>
+                )}
+              </div>
             </Section>
           )}
 
