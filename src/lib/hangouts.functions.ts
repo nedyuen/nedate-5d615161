@@ -820,10 +820,13 @@ export const adminRemoveInvitee = createServerFn({ method: "POST" })
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, title, pitch, start_time, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+        "id, title, pitch, start_time, hangout_status, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
       )
       .eq("id", inv.hangout_id)
       .maybeSingle();
+    if (!hangout || (hangout as any).hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
 
     await supabaseAdmin
       .from("hangout_participants")
