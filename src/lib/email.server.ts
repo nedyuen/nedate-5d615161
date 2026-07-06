@@ -56,9 +56,12 @@ export function sendRequestConfirmationEmail(data: {
   name: string;
   pitch: string;
   venue: string;
-  when: string;
+  when: string | null;
   trackingUrl: string;
 }): SendResult {
+  const whenText = data.when && data.when.length > 0
+    ? esc(data.when)
+    : `<span style="color:#666;font-style:italic;">Ned will suggest a date/time soon.</span>`;
   const html = wrap(
     `Hey ${data.name}, your request is in 🌿`,
     `<p style="margin:0 0 14px;color:#222;font-size:15px;line-height:1.55;">Ned just got your invite. You'll hear back soon — promise.</p>
@@ -66,7 +69,7 @@ export function sendRequestConfirmationEmail(data: {
        <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">Where</div>
        <div style="margin-top:2px;">${esc(data.venue)}</div>
        <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-top:12px;">When</div>
-       <div style="margin-top:2px;">${esc(data.when)}</div>
+       <div style="margin-top:2px;">${whenText}</div>
        <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-top:12px;">Your pitch</div>
        <div style="margin-top:2px;font-style:italic;">"${esc(data.pitch)}"</div>
      </div>
@@ -77,6 +80,42 @@ export function sendRequestConfirmationEmail(data: {
     to: [data.to],
     bcc: [BCC],
     subject: "Your Nedate request is in",
+    html,
+  });
+}
+
+export function sendTimeSuggestedEmail(data: {
+  to: string;
+  recipientName: string;
+  hangoutTitle: string;
+  venue: string;
+  suggestedWhen: string;
+  comment?: string | null;
+  actionUrl: string;
+}): SendResult {
+  const note = data.comment
+    ? `<div style="margin-top:18px;background:#FBF2DC;border:1px solid #F0DDA8;border-radius:16px;padding:16px 18px;font-size:14px;color:#222;">
+         <div style="color:#1E4D3D;font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;">A note from Ned</div>
+         <div style="margin-top:6px;">${esc(data.comment)}</div>
+       </div>`
+    : "";
+  const html = wrap(
+    `Ned suggested a time ✨`,
+    `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;">Hey ${esc(data.recipientName)}, Ned suggested a time for <strong>${esc(data.hangoutTitle)}</strong>. Take a look and let him know if it works.</p>
+     ${note}
+     <div style="margin-top:18px;background:#F8F5EE;border-radius:16px;padding:16px 18px;font-size:14px;">
+       <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">Suggested time</div>
+       <div style="margin-top:2px;">${esc(data.suggestedWhen)}</div>
+       <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-top:12px;">Where</div>
+       <div style="margin-top:2px;">${esc(data.venue)}</div>
+     </div>
+     ${btn(data.actionUrl, "Accept or reject")}`,
+  );
+  return sendViaResend({
+    from: FROM,
+    to: [data.to],
+    bcc: [BCC],
+    subject: "Ned suggested a time for your hangout",
     html,
   });
 }
