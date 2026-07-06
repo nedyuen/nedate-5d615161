@@ -218,8 +218,9 @@ export type Database = {
           request_status: string | null
           requester_email: string | null
           requester_name: string | null
+          schedule_status: string
           slug: string
-          start_time: string
+          start_time: string | null
           title: string | null
           updated_at: string
           venue_id: string | null
@@ -246,8 +247,9 @@ export type Database = {
           request_status?: string | null
           requester_email?: string | null
           requester_name?: string | null
+          schedule_status?: string
           slug?: string
-          start_time: string
+          start_time?: string | null
           title?: string | null
           updated_at?: string
           venue_id?: string | null
@@ -274,8 +276,9 @@ export type Database = {
           request_status?: string | null
           requester_email?: string | null
           requester_name?: string | null
+          schedule_status?: string
           slug?: string
-          start_time?: string
+          start_time?: string | null
           title?: string | null
           updated_at?: string
           venue_id?: string | null
