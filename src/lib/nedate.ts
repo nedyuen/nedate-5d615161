@@ -65,7 +65,8 @@ export function isoToLondonLocal(iso: string | null | undefined): string {
   return `${parts.year}-${parts.month}-${parts.day}T${hh}:${parts.minute}`;
 }
 
-export function fmtRange(start: string, end?: string | null) {
+export function fmtRange(start: string | null | undefined, end?: string | null) {
+  if (!start) return "Not decided yet";
   const s = new Date(start);
   const dateOpts: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric", timeZone: APP_TZ };
   const timeOpts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit", timeZone: APP_TZ };
