@@ -556,6 +556,16 @@ export const reconfirmAttendance = createServerFn({ method: "POST" })
       return { ok: false as const, error: "not_attendee" as const };
     }
 
+    // Enforce active-only rule
+    const { data: hg } = await supabaseAdmin
+      .from("requests")
+      .select("hangout_status")
+      .eq("id", viewer.hangout_id)
+      .maybeSingle();
+    if (!hg || hg.hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
+
     // Clear reconfirmation flag
     await supabaseAdmin
       .from("hangout_participants")
