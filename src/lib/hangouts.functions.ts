@@ -922,3 +922,144 @@ export const adminRemoveJoiner = createServerFn({ method: "POST" })
     }
     return { ok: true as const };
   });
+
+// --- admin: cancel a hangout (Ned only, final) ---
+// Sets hangout_status='cancelled', writes audit fields, invalidates open
+// change proposals, cascades to public join-request child rows (status only,
+// preserving request_status), and emails every affected participant.
+export const adminCancelHangout = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        adminPassword: z.string().min(1).max(200),
+        hangoutId: z.string().uuid(),
+        comment: z.string().trim().max(2000).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const trimmed = data.comment?.trim() || null;
+
+    const { data: hangout } = await supabaseAdmin
+      .from("requests")
+      .select(
+        "id, slug, title, pitch, start_time, hangout_kind, hangout_status, requester_name, requester_email, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+      )
+      .eq("id", data.hangoutId)
+      .maybeSingle();
+    if (!hangout) return { ok: false as const, error: "not_found" as const };
+    if (hangout.hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_terminal" as const };
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const { error: upErr } = await supabaseAdmin
+      .from("requests")
+      .update({
+        hangout_status: "cancelled",
+        cancelled_at: nowIso,
+        cancelled_by: "ned",
+        cancellation_comment: trimmed,
+        updated_at: nowIso,
+      } as any)
+      .eq("id", hangout.id);
+    if (upErr) {
+      console.error("[hangouts] adminCancelHangout update", upErr);
+      return { ok: false as const, error: "update_failed" as const };
+    }
+
+    // Invalidate open change proposals
+    await supabaseAdmin
+      .from("hangout_change_requests")
+      .update({
+        status: "rejected",
+        responder_comment: "Hangout cancelled",
+        responded_at: nowIso,
+      })
+      .eq("hangout_id", hangout.id)
+      .eq("status", "pending");
+
+    // Recipient collection
+    type Recipient = { email: string; name: string; slug: string | null; kind: "invitee" | "requester" };
+    const recipients: Recipient[] = [];
+
+    if (hangout.hangout_kind === "friend_request") {
+      if (hangout.requester_email && hangout.requester_name) {
+        recipients.push({
+          email: hangout.requester_email,
+          name: hangout.requester_name,
+          slug: hangout.slug,
+          kind: "requester",
+        });
+      }
+    } else {
+      // public_hangout or private_hangout: invitees
+      const { data: invs } = await supabaseAdmin
+        .from("hangout_invitees")
+        .select("name, email, slug")
+        .eq("hangout_id", hangout.id);
+      for (const i of invs ?? []) {
+        recipients.push({ email: i.email, name: i.name, slug: i.slug, kind: "invitee" });
+      }
+      // public hangout: also cascade to join-request children + notify joiners
+      if (hangout.hangout_kind === "public_hangout") {
+        const { data: joins } = await supabaseAdmin
+          .from("requests")
+          .select("id, slug, requester_name, requester_email, request_status")
+          .eq("parent_hangout_id", hangout.id)
+          .eq("hangout_kind", "join_request")
+          .eq("hangout_status", "active");
+        const joinIds = (joins ?? []).map((j: any) => j.id);
+        if (joinIds.length) {
+          await supabaseAdmin
+            .from("requests")
+            .update({
+              hangout_status: "cancelled",
+              cancelled_at: nowIso,
+              cancelled_by: "ned",
+              cancellation_comment: trimmed,
+              updated_at: nowIso,
+            } as any)
+            .in("id", joinIds);
+        }
+        for (const j of joins ?? []) {
+          if (!j.requester_email || !j.requester_name) continue;
+          recipients.push({
+            email: j.requester_email,
+            name: j.requester_name,
+            slug: j.slug,
+            kind: "requester",
+          });
+        }
+      }
+    }
+
+    // Emails
+    const v = venueDisplayServer(hangout as any);
+    const venueText = v.name + (v.location ? ` · ${v.location}` : "");
+    const when = fmtRangeServer(hangout.start_time);
+    const title = hangout.title ?? hangout.pitch ?? "Your hangout";
+
+    const results = await Promise.allSettled(
+      recipients.map((r) => {
+        const trackingUrl = r.slug
+          ? `${getOrigin()}/${r.kind === "invitee" ? "i" : "r"}/${r.slug}`
+          : getOrigin();
+        return sendHangoutCancelledEmail({
+          to: r.email,
+          recipientName: r.name,
+          hangoutTitle: title,
+          venue: venueText,
+          when,
+          comment: trimmed,
+          trackingUrl,
+        });
+      }),
+    );
+    const notified = results.filter((r) => r.status === "fulfilled" && (r.value as any).ok).length;
+
+    return { ok: true as const, notified, total: recipients.length };
+  });
