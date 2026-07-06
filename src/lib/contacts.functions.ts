@@ -115,10 +115,13 @@ export const sendBulkMessage = createServerFn({ method: "POST" })
 
     const { data: hangout } = await supabaseAdmin
       .from("requests")
-      .select("id, title, pitch")
+      .select("id, title, pitch, hangout_status")
       .eq("id", data.hangoutId)
       .maybeSingle();
     if (!hangout) return { ok: false as const, error: "not_found" as const };
+    if ((hangout as any).hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
 
     const recipients = new Map<string, { name: string; email: string }>();
 
