@@ -880,10 +880,13 @@ export const adminRemoveJoiner = createServerFn({ method: "POST" })
     const { data: parent } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, title, pitch, start_time, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+        "id, title, pitch, start_time, hangout_status, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
       )
       .eq("id", req.parent_hangout_id ?? "")
       .maybeSingle();
+    if (!parent || (parent as any).hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
 
     await supabaseAdmin
       .from("requests")
