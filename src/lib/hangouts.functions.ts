@@ -30,7 +30,8 @@ function assertAdmin(pw: string) {
 const SLUG_RE = /^[a-z0-9]{8,32}$/i;
 
 const TZ = "Europe/London";
-function fmtRangeServer(start: string) {
+function fmtRangeServer(start: string | null | undefined) {
+  if (!start) return "To be decided — Ned will suggest a time";
   const s = new Date(start);
   return `${s.toLocaleDateString("en-GB", { weekday: "short", month: "short", day: "numeric", timeZone: TZ })} · ${s.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", timeZone: TZ })}`;
 }
