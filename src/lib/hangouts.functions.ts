@@ -219,6 +219,22 @@ export const respondToInvite = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Look up parent hangout via the invitee slug to enforce the
+    // active-only rule (cancelled/completed hangouts are read-only).
+    const { data: inviteLookup } = await supabaseAdmin
+      .from("hangout_invitees")
+      .select("hangout_id")
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (!inviteLookup) return { ok: false as const, error: "not_found" as const };
+    const { data: parent } = await supabaseAdmin
+      .from("requests")
+      .select("hangout_status")
+      .eq("id", inviteLookup.hangout_id)
+      .maybeSingle();
+    if (!parent || parent.hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
     const { data: invite, error } = await supabaseAdmin
       .from("hangout_invitees")
       .update({
