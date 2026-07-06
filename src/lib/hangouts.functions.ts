@@ -1063,3 +1063,225 @@ export const adminCancelHangout = createServerFn({ method: "POST" })
 
     return { ok: true as const, notified, total: recipients.length };
   });
+
+// -----------------------------------------------------------------------------
+// Person History (admin-only, read-only)
+// -----------------------------------------------------------------------------
+
+function normEmail(e: string | null | undefined): string | null {
+  if (!e) return null;
+  const t = e.trim().toLowerCase();
+  return t.length > 0 ? t : null;
+}
+
+type PersonHangoutSummary = {
+  id: string;
+  title: string | null;
+  category: string;
+  hangout_kind: string;
+  visibility: string;
+  hangout_status: string;
+  start_time: string | null;
+  end_time: string | null;
+  created_at: string;
+  venue_name: string | null;
+};
+
+export const listPeople = createServerFn({ method: "POST" })
+  .inputValidator((d: { adminPassword: string }) => d)
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: parts } = await supabaseAdmin
+      .from("hangout_participants")
+      .select("hangout_id, email, display_name, updated_at, is_active, type")
+      .not("email", "is", null)
+      .neq("email", "");
+
+    // Group by normalized email
+    const byEmail = new Map<
+      string,
+      {
+        email: string;
+        display_name: string | null;
+        display_updated_at: string;
+        hangout_ids: Set<string>;
+      }
+    >();
+    for (const p of parts ?? []) {
+      const key = normEmail(p.email);
+      if (!key) continue;
+      let g = byEmail.get(key);
+      if (!g) {
+        g = { email: key, display_name: null, display_updated_at: "", hangout_ids: new Set() };
+        byEmail.set(key, g);
+      }
+      g.hangout_ids.add(p.hangout_id);
+      const name = (p.display_name ?? "").trim();
+      if (name && (!g.display_name || (p.updated_at ?? "") > g.display_updated_at)) {
+        g.display_name = name;
+        g.display_updated_at = p.updated_at ?? "";
+      }
+    }
+
+    if (byEmail.size === 0) return { people: [] as any[] };
+
+    const allIds = Array.from(new Set(Array.from(byEmail.values()).flatMap((g) => Array.from(g.hangout_ids))));
+    const { data: reqs } = await supabaseAdmin
+      .from("requests")
+      .select("id, title, category, hangout_kind, visibility, hangout_status, start_time, end_time, created_at, venue:venues(name)")
+      .in("id", allIds);
+
+    const reqById = new Map<string, PersonHangoutSummary>();
+    for (const r of (reqs as any[]) ?? []) {
+      reqById.set(r.id, {
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        hangout_kind: r.hangout_kind,
+        visibility: r.visibility,
+        hangout_status: r.hangout_status,
+        start_time: r.start_time,
+        end_time: r.end_time,
+        created_at: r.created_at,
+        venue_name: r.venue?.name ?? null,
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+    const people = Array.from(byEmail.values()).map((g) => {
+      const hs = Array.from(g.hangout_ids).map((id) => reqById.get(id)).filter(Boolean) as PersonHangoutSummary[];
+      let completed = 0, cancelled = 0, upcoming = 0;
+      for (const h of hs) {
+        if (h.hangout_status === "completed") completed++;
+        else if (h.hangout_status === "cancelled") cancelled++;
+        if (h.hangout_status === "active" && h.start_time && h.start_time >= nowIso) upcoming++;
+      }
+      const sortKey = (h: PersonHangoutSummary) => h.start_time ?? h.created_at;
+      const sortedByTime = [...hs].sort((a, b) => (sortKey(b) ?? "").localeCompare(sortKey(a) ?? ""));
+      const latest = sortedByTime[0] ?? null;
+      const lastCompleted = sortedByTime.find((h) => h.hangout_status === "completed") ?? null;
+      return {
+        email: g.email,
+        display_name: g.display_name,
+        total: hs.length,
+        completed,
+        cancelled,
+        upcoming,
+        latest_hangout_record: latest,
+        last_completed_hangout: lastCompleted,
+      };
+    });
+
+    people.sort((a, b) => {
+      const ak = a.latest_hangout_record ? (a.latest_hangout_record.start_time ?? a.latest_hangout_record.created_at) : "";
+      const bk = b.latest_hangout_record ? (b.latest_hangout_record.start_time ?? b.latest_hangout_record.created_at) : "";
+      return (bk ?? "").localeCompare(ak ?? "");
+    });
+
+    return { people };
+  });
+
+export const getPersonHistory = createServerFn({ method: "POST" })
+  .inputValidator((d: { adminPassword: string; email: string }) => d)
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const key = normEmail(data.email);
+    if (!key) return { person: null, hangouts: [] as any[] };
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: parts } = await supabaseAdmin
+      .from("hangout_participants")
+      .select("hangout_id, email, display_name, updated_at, is_active, type, role_source, created_at")
+      .not("email", "is", null)
+      .neq("email", "");
+
+    const matches = (parts ?? []).filter((p) => normEmail(p.email) === key);
+    if (matches.length === 0) return { person: null, hangouts: [] as any[] };
+
+    // Pick canonical display name: most recent non-empty by updated_at
+    let displayName: string | null = null;
+    let displayUpdated = "";
+    for (const p of matches) {
+      const n = (p.display_name ?? "").trim();
+      if (n && (p.updated_at ?? "") > displayUpdated) {
+        displayName = n;
+        displayUpdated = p.updated_at ?? "";
+      }
+    }
+
+    // Collapse to one participant row per hangout: prefer is_active, else most recent updated_at
+    const byHangout = new Map<string, typeof matches[number]>();
+    for (const p of matches) {
+      const cur = byHangout.get(p.hangout_id);
+      if (!cur) { byHangout.set(p.hangout_id, p); continue; }
+      const curActive = cur.is_active ? 1 : 0;
+      const pActive = p.is_active ? 1 : 0;
+      if (pActive > curActive) { byHangout.set(p.hangout_id, p); continue; }
+      if (pActive === curActive && (p.updated_at ?? "") > (cur.updated_at ?? "")) {
+        byHangout.set(p.hangout_id, p);
+      }
+    }
+
+    const ids = Array.from(byHangout.keys());
+    const { data: reqs } = await supabaseAdmin
+      .from("requests")
+      .select("id, title, category, hangout_kind, visibility, hangout_status, start_time, end_time, created_at, cancelled_at, cancellation_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)")
+      .in("id", ids);
+
+    const { data: changes } = await supabaseAdmin
+      .from("hangout_change_requests")
+      .select("hangout_id, status, responded_at, created_at")
+      .in("hangout_id", ids);
+
+    const changesByHangout = new Map<string, { pending: number; approved: number; rejected: number; total: number; latest_resolved: { status: string; responded_at: string | null } | null }>();
+    for (const id of ids) changesByHangout.set(id, { pending: 0, approved: 0, rejected: 0, total: 0, latest_resolved: null });
+    for (const c of (changes as any[]) ?? []) {
+      const g = changesByHangout.get(c.hangout_id);
+      if (!g) continue;
+      g.total++;
+      if (c.status === "pending") g.pending++;
+      else if (c.status === "approved") g.approved++;
+      else if (c.status === "rejected") g.rejected++;
+      if (c.status !== "pending") {
+        const t = c.responded_at ?? c.created_at ?? "";
+        const cur = g.latest_resolved;
+        const curT = cur ? (cur.responded_at ?? "") : "";
+        if (!cur || t > curT) g.latest_resolved = { status: c.status, responded_at: c.responded_at ?? null };
+      }
+    }
+
+    const hangouts = ((reqs as any[]) ?? []).map((r) => {
+      const p = byHangout.get(r.id)!;
+      return {
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        hangout_kind: r.hangout_kind,
+        visibility: r.visibility,
+        hangout_status: r.hangout_status,
+        start_time: r.start_time,
+        end_time: r.end_time,
+        created_at: r.created_at,
+        cancelled_at: r.cancelled_at,
+        cancellation_comment: r.cancellation_comment,
+        venue: r.venue
+          ? { name: r.venue.name, location: r.venue.location, image_url: r.venue.image_url }
+          : { name: r.custom_venue_name ?? "TBD", location: r.custom_venue_location ?? null, image_url: r.custom_venue_image_url ?? null },
+        role: p.type,
+        source: p.role_source,
+        participant_created_at: p.created_at,
+        changes: changesByHangout.get(r.id) ?? { pending: 0, approved: 0, rejected: 0, total: 0, latest_resolved: null },
+      };
+    });
+
+    hangouts.sort((a, b) => {
+      const ak = a.start_time ?? a.created_at ?? "";
+      const bk = b.start_time ?? b.created_at ?? "";
+      return bk.localeCompare(ak);
+    });
+
+    return { person: { email: key, display_name: displayName }, hangouts };
+  });
