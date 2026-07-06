@@ -51,6 +51,7 @@ function StatusPage() {
   const status = req.request_status ?? "pending";
   const v = venueDisplay(req);
   const isCancelled = req.hangout_status === "cancelled";
+  const isUnscheduled = req.schedule_status === "unscheduled";
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,6 +80,19 @@ function StatusPage() {
                   "{req.cancellation_comment}"
                 </div>
               )}
+            </div>
+          )}
+
+          {!isCancelled && isUnscheduled && (
+            <div className="mb-4 rounded-3xl border border-accent/40 bg-accent/15 p-5">
+              <div className="flex items-center gap-2 text-primary font-medium">
+                <Clock className="size-4" /> Awaiting time
+              </div>
+              <p className="mt-1 text-sm text-foreground/80">
+                {status === "approved"
+                  ? "Ned said yes! He'll suggest a date and time shortly — you'll get an email when he does."
+                  : "Once Ned reviews your request, he'll suggest a date and time here."}
+              </p>
             </div>
           )}
 
