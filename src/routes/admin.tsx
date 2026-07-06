@@ -252,7 +252,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
   }
 
   return (
-    <div className={`rounded-2xl bg-card border border-border/60 shadow-soft ${isCancelled ? "opacity-70" : ""}`}>
+    <div id={`hangout-${h.id}`} className={`rounded-2xl bg-card border border-border/60 shadow-soft scroll-mt-24 ${isCancelled ? "opacity-70" : ""}`}>
       <div className="w-full flex items-center gap-3 p-4">
         <button onClick={() => setOpen(o => !o)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
