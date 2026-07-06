@@ -47,22 +47,34 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
   const kind = (hangout as any).hangout_kind ?? "friend_request";
   const isFriendRequest = kind === "friend_request";
   const nedApprovesOnly = !isFriendRequest;
+  const isUnscheduled = (hangout as any).schedule_status === "unscheduled";
   const canRespond = !!pendingProposal && (
     nedApprovesOnly ? viewer.type === "ned" : !isProposer
   );
   const v = venueDisplay(hangout as any);
   const terminal = hangout.hangout_status === "cancelled" || hangout.hangout_status === "completed";
-  const canPropose = !terminal && !pendingProposal;
+  // In the "awaiting time" state only Ned may propose (and only once the request is approved).
+  const requestApproved = ((hangout as any).request_status ?? "pending") === "approved";
+  const canPropose =
+    !terminal &&
+    !pendingProposal &&
+    (isUnscheduled
+      ? viewer.type === "ned" && requestApproved
+      : true);
 
-  const subtitle = isFriendRequest
-    ? "changes require the other side to accept"
-    : "any participant can propose · Ned approves";
+  const subtitle = isUnscheduled
+    ? "awaiting a time from Ned"
+    : isFriendRequest
+      ? "changes require the other side to accept"
+      : "any participant can propose · Ned approves";
+
+  const proposeLabel = isUnscheduled ? "Suggest a time" : "Propose changes";
 
   return (
     <div className="mt-8 rounded-3xl border border-border/60 bg-card shadow-soft overflow-hidden">
       <div className="px-6 pt-5 pb-3 flex items-center justify-between">
         <div>
-          <h2 className="font-display text-xl text-primary">The agreement</h2>
+          <h2 className="font-display text-xl text-primary">{isUnscheduled ? "Scheduling" : "The agreement"}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {participants.length} participant{participants.length === 1 ? "" : "s"} · {subtitle}
           </p>
@@ -72,7 +84,7 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
             onClick={() => setProposing(true)}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
-            <Pencil className="size-3.5" /> Propose changes
+            <Pencil className="size-3.5" /> {proposeLabel}
           </button>
         )}
       </div>
