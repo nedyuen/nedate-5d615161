@@ -396,9 +396,12 @@ export const respondToHangoutChange = createServerFn({ method: "POST" })
     // - public / private: only Ned is the final approver
     const { data: hangoutRow } = await supabaseAdmin
       .from("requests")
-      .select("hangout_kind")
+      .select("hangout_kind, hangout_status")
       .eq("id", proposal.hangout_id)
       .maybeSingle();
+    if (!hangoutRow || hangoutRow.hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_terminal" as const };
+    }
     const hangoutKind = hangoutRow?.hangout_kind ?? "friend_request";
     if (hangoutKind === "friend_request") {
       if (proposal.proposed_by_participant_id === viewer.id) {
