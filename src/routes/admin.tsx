@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { ADMIN_PASSWORD, ADMIN_STORAGE_KEY, CATEGORIES, categoryMeta, fmtRange, londonLocalToIso, venueDisplay } from "@/lib/nedate";
-import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles, Send, Mail, UserPlus, Ban } from "lucide-react";
+import { ADMIN_PASSWORD, ADMIN_STORAGE_KEY, CATEGORIES, categoryMeta, displayNameFor, fmtRange, londonLocalToIso, venueDisplay } from "@/lib/nedate";
+import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles, Send, Mail, UserPlus, Ban, Users, Search, History } from "lucide-react";
 import { toast } from "sonner";
 import {
   createHangout,
@@ -15,6 +15,8 @@ import {
   adminRemoveInvitee,
   adminRemoveJoiner,
   adminCancelHangout,
+  listPeople,
+  getPersonHistory,
 } from "@/lib/hangouts.functions";
 
 import {
