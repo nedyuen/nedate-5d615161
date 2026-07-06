@@ -1,12 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
+  sendHangoutCancelledEmail,
   sendInvitationEmail,
   sendInviteeResponseToNedEmail,
   sendRemovedFromHangoutEmail,
   sendRequestConfirmationEmail,
   sendRequestUpdateEmail,
 } from "./email.server";
+
+// -----------------------------------------------------------------------------
+// Active-workflow rule:
+// Only hangouts with hangout_status='active' participate in active workflows.
+// Any non-active status (cancelled, completed) is read-only: write paths must
+// reject them, and active listings must exclude them. Future reminder /
+// background jobs must apply the same filter.
+// -----------------------------------------------------------------------------
 
 
 // Admin password verified server-side. Mirrors client constant but the
