@@ -436,7 +436,7 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
         </div>
 
         <div className="mt-4 grid gap-2 text-sm">
-          <div><span className="text-muted-foreground">When: </span>{fmtRange(req.start_time, req.end_time)}</div>
+          <div><span className="text-muted-foreground">When: </span>{req.schedule_status === "unscheduled" ? "Not decided yet" : fmtRange(req.start_time, req.end_time)}</div>
           <div><span className="text-muted-foreground">Where: </span>{v.name}{v.location ? ` · ${v.location}` : ""}</div>
           <div>
             <span className="text-muted-foreground">Status: </span>
