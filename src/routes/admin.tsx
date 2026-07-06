@@ -469,6 +469,13 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
           </div>
         )}
       </div>
+      {showCancel && (
+        <CancelHangoutModal
+          hangout={req}
+          onClose={() => setShowCancel(false)}
+          onCancelled={() => { setShowCancel(false); onUpdated(); }}
+        />
+      )}
     </div>
   );
 }
