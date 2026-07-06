@@ -44,6 +44,7 @@ type Hangout = {
   request_message: string | null;
   start_time: string; end_time: string | null;
   admin_comment: string | null;
+  cancelled_at: string | null; cancelled_by: string | null; cancellation_comment: string | null;
   parent_hangout_id: string | null;
   custom_venue_name: string | null; custom_venue_location: string | null; custom_venue_image_url: string | null;
   created_at: string;
