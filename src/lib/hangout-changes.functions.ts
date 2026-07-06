@@ -434,7 +434,7 @@ export const respondToHangoutChange = createServerFn({ method: "POST" })
     // - public / private: only Ned is the final approver
     const { data: hangoutRow } = await supabaseAdmin
       .from("requests")
-      .select("hangout_kind, hangout_status")
+      .select("hangout_kind, hangout_status, schedule_status")
       .eq("id", proposal.hangout_id)
       .maybeSingle();
     if (!hangoutRow || hangoutRow.hangout_status !== "active") {
@@ -471,7 +471,13 @@ export const respondToHangoutChange = createServerFn({ method: "POST" })
       for (const k of MUTABLE_KEYS) {
         if (k in newSnap) updatePayload[k] = newSnap[k];
       }
+      // Flip schedule_status when an unscheduled friend request gets its first time.
+      if ((hangoutRow as any)?.schedule_status === "unscheduled" && newSnap.start_time) {
+        updatePayload.schedule_status = "scheduled";
+      }
       updatePayload.updated_at = new Date().toISOString();
+
+
 
       const { error: upErr } = await (supabaseAdmin as any)
         .from("requests")
