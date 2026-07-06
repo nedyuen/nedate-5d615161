@@ -1118,3 +1118,78 @@ function AddInviteesModal({
     </div>
   );
 }
+
+// ===== Cancel hangout modal =====
+function CancelHangoutModal({
+  hangout,
+  onClose,
+  onCancelled,
+}: {
+  hangout: Hangout;
+  onClose: () => void;
+  onCancelled: () => void;
+}) {
+  const cancelFn = useServerFn(adminCancelHangout);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    const res = await cancelFn({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        hangoutId: hangout.id,
+        comment: comment.trim() || null,
+      },
+    });
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(
+        res.error === "hangout_terminal"
+          ? "This hangout is already closed"
+          : "Couldn't cancel",
+      );
+      return;
+    }
+    toast.success(`Cancelled · ${res.notified}/${res.total} notified`);
+    onCancelled();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-3xl bg-card border border-border/60 p-7 shadow-warm">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-display text-2xl text-primary flex items-center gap-2"><Ban className="size-5 text-red-600" /> Cancel hangout</h2>
+            <p className="text-sm text-muted-foreground truncate">{hangout.title ?? hangout.pitch ?? "Hangout"}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted"><X className="size-4" /></button>
+        </div>
+
+        <p className="text-sm text-foreground">
+          This will cancel the hangout and notify all affected participants.
+        </p>
+
+        <label className="block mt-5">
+          <span className="text-sm font-medium text-primary">Note to participants (optional)</span>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={4}
+            maxLength={2000}
+            placeholder="Something came up — sorry for the change of plans."
+            className="mt-1.5 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary resize-none"
+          />
+        </label>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-full border border-border px-5 py-2.5 text-sm hover:bg-muted">Keep hangout</button>
+          <button disabled={busy} className="rounded-full bg-red-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-2">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />} Cancel hangout
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
