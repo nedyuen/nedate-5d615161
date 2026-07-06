@@ -156,6 +156,7 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
         <ProposeDialog
           actor={actor}
           current={hangout}
+          timeOnly={isUnscheduled}
           onClose={() => setProposing(false)}
           onSubmitted={() => { setProposing(false); reload(); }}
         />
