@@ -199,6 +199,9 @@ export type Database = {
       requests: {
         Row: {
           admin_comment: string | null
+          cancellation_comment: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           category: string
           created_at: string
           custom_venue_image_url: string | null
@@ -224,6 +227,9 @@ export type Database = {
         }
         Insert: {
           admin_comment?: string | null
+          cancellation_comment?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           category: string
           created_at?: string
           custom_venue_image_url?: string | null
@@ -249,6 +255,9 @@ export type Database = {
         }
         Update: {
           admin_comment?: string | null
+          cancellation_comment?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           category?: string
           created_at?: string
           custom_venue_image_url?: string | null
