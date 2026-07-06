@@ -218,9 +218,13 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
   const [open, setOpen] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
   const removeInv = useServerFn(adminRemoveInvitee);
   const removeJoin = useServerFn(adminRemoveJoiner);
   const v = venueDisplay(h);
+  const isCancelled = h.hangout_status === "cancelled";
+  const isCompleted = h.hangout_status === "completed";
+  const isActive = h.hangout_status === "active";
 
   async function handleRemoveInvitee(inv: Invitee) {
     if (!confirm(`Remove ${inv.name} from this hangout? They'll be notified by email.`)) return;
@@ -238,30 +242,49 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
   }
 
   return (
-    <div className="rounded-2xl bg-card border border-border/60 shadow-soft">
+    <div className={`rounded-2xl bg-card border border-border/60 shadow-soft ${isCancelled ? "opacity-70" : ""}`}>
       <div className="w-full flex items-center gap-3 p-4">
         <button onClick={() => setOpen(o => !o)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(h.category).emoji} {categoryMeta(h.category).label}</span>
               <span className={`text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide ${h.visibility === "public" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground"}`}>{h.visibility}</span>
+              {isCancelled && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-red-100 text-red-800 font-medium">Cancelled</span>}
+              {isCompleted && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-muted text-muted-foreground">Completed</span>}
             </div>
-            <div className="mt-0.5 font-display text-lg text-primary truncate">{h.title}</div>
+            <div className={`mt-0.5 font-display text-lg text-primary truncate ${isCancelled ? "line-through" : ""}`}>{h.title}</div>
             <div className="text-xs text-muted-foreground">{fmtRange(h.start_time)} · {v.name}</div>
           </div>
           <div className="text-xs text-muted-foreground hidden sm:block">{invitees.length} invited{joinRequests.length ? ` · ${joinRequests.length} requests` : ""}</div>
         </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); setShowBulk(true); }}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-primary hover:bg-muted"
-          title="Send a message to people in this hangout"
-        >
-          <Mail className="size-3.5" /> Message
-        </button>
+        {isActive && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowBulk(true); }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-primary hover:bg-muted"
+              title="Send a message to people in this hangout"
+            >
+              <Mail className="size-3.5" /> Message
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowCancel(true); }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-card px-3 py-1.5 text-xs text-red-700 hover:bg-red-50"
+              title="Cancel this hangout"
+            >
+              <Ban className="size-3.5" /> Cancel
+            </button>
+          </>
+        )}
       </div>
       {open && (
         <div className="border-t border-border/60 p-4 space-y-4">
+          {isCancelled && (
+            <div className="rounded-2xl bg-red-50 border border-red-200 p-4">
+              <div className="text-xs font-medium text-red-800 uppercase tracking-wide">Cancelled{h.cancelled_at ? ` · ${new Date(h.cancelled_at).toLocaleString("en-GB")}` : ""}</div>
+              {h.cancellation_comment && <div className="mt-1 text-sm text-red-900 italic">"{h.cancellation_comment}"</div>}
+            </div>
+          )}
           {h.pitch && <p className="text-sm italic text-muted-foreground">"{h.pitch}"</p>}
           {h.visibility === "public" && (
             <div className="text-xs text-muted-foreground">Public link: <Link to="/join/$slug" params={{ slug: h.slug }} className="underline">/join/{h.slug}</Link></div>
@@ -269,7 +292,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-medium text-primary uppercase tracking-wide">Invitees ({invitees.length})</div>
-              <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><UserPlus className="size-3.5" /> Add invitees</button>
+              {isActive && <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><UserPlus className="size-3.5" /> Add invitees</button>}
             </div>
             {invitees.length === 0 ? <Empty>No invitees.</Empty> : (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -279,7 +302,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
                       <div className="font-medium text-primary truncate">{i.name}</div>
                       <div className="flex items-center gap-1.5">
                         <InviteePill status={i.response_status} />
-                        <button onClick={() => handleRemoveInvitee(i)} title="Remove invitee" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>
+                        {isActive && <button onClick={() => handleRemoveInvitee(i)} title="Remove invitee" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>}
                       </div>
                     </div>
                     <div className="text-xs text-muted-foreground truncate">{i.email}</div>
@@ -302,7 +325,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
                       </button>
                       <div className="flex items-center gap-1.5">
                         <StatusPill status={j.request_status ?? "pending"} />
-                        <button onClick={() => handleRemoveJoiner(j)} title="Remove joiner" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>
+                        {isActive && <button onClick={() => handleRemoveJoiner(j)} title="Remove joiner" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>}
                       </div>
                     </div>
                     <button onClick={() => onOpenRequest(j)} className="text-left w-full">
@@ -331,6 +354,13 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
           existingEmails={new Set(invitees.map((i) => i.email.toLowerCase()))}
           onClose={() => setShowAdd(false)}
           onAdded={() => { setShowAdd(false); onChanged(); }}
+        />
+      )}
+      {showCancel && (
+        <CancelHangoutModal
+          hangout={h}
+          onClose={() => setShowCancel(false)}
+          onCancelled={() => { setShowCancel(false); onChanged(); }}
         />
       )}
     </div>
