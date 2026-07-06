@@ -41,10 +41,11 @@ type Hangout = {
   id: string; slug: string; category: string;
   hangout_kind: string; initiator: string; visibility: string;
   hangout_status: string; request_status: string | null;
+  schedule_status?: string | null;
   title: string | null; pitch: string | null;
   requester_name: string | null; requester_email: string | null;
   request_message: string | null;
-  start_time: string; end_time: string | null;
+  start_time: string | null; end_time: string | null;
   admin_comment: string | null;
   cancelled_at: string | null; cancelled_by: string | null; cancellation_comment: string | null;
   parent_hangout_id: string | null;
