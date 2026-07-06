@@ -1,12 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
+  sendHangoutCancelledEmail,
   sendInvitationEmail,
   sendInviteeResponseToNedEmail,
   sendRemovedFromHangoutEmail,
   sendRequestConfirmationEmail,
   sendRequestUpdateEmail,
 } from "./email.server";
+
+// -----------------------------------------------------------------------------
+// Active-workflow rule:
+// Only hangouts with hangout_status='active' participate in active workflows.
+// Any non-active status (cancelled, completed) is read-only: write paths must
+// reject them, and active listings must exclude them. Future reminder /
+// background jobs must apply the same filter.
+// -----------------------------------------------------------------------------
 
 
 // Admin password verified server-side. Mirrors client constant but the
@@ -190,7 +199,7 @@ export const getInviteByToken = createServerFn({ method: "GET" })
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, slug, category, title, pitch, start_time, hangout_status, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+        "id, slug, category, title, pitch, start_time, hangout_status, cancelled_at, cancellation_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
       )
       .eq("id", invite.hangout_id)
       .maybeSingle();
@@ -210,6 +219,22 @@ export const respondToInvite = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Look up parent hangout via the invitee slug to enforce the
+    // active-only rule (cancelled/completed hangouts are read-only).
+    const { data: inviteLookup } = await supabaseAdmin
+      .from("hangout_invitees")
+      .select("hangout_id")
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (!inviteLookup) return { ok: false as const, error: "not_found" as const };
+    const { data: parent } = await supabaseAdmin
+      .from("requests")
+      .select("hangout_status")
+      .eq("id", inviteLookup.hangout_id)
+      .maybeSingle();
+    if (!parent || parent.hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
     const { data: invite, error } = await supabaseAdmin
       .from("hangout_invitees")
       .update({
@@ -514,7 +539,7 @@ export const getRequestTracking = createServerFn({ method: "GET" })
     const { data: row, error } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, slug, category, requester_name, pitch, start_time, end_time, request_status, hangout_kind, admin_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, parent_hangout_id, request_message, venue:venues(name, location, image_url)",
+        "id, slug, category, requester_name, pitch, start_time, end_time, request_status, hangout_kind, hangout_status, admin_comment, cancelled_at, cancellation_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, parent_hangout_id, request_message, venue:venues(name, location, image_url)",
       )
       .eq("slug", data.slug)
       .maybeSingle();
@@ -602,6 +627,30 @@ export const adminUpdateRequestStatus = createServerFn({ method: "POST" })
     assertAdmin(data.adminPassword);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const trimmed = data.comment?.trim() || null;
+
+    // Enforce active-only rule: cannot approve/reject a request on a
+    // cancelled or completed hangout.
+    const { data: reqRow } = await supabaseAdmin
+      .from("requests")
+      .select("hangout_status, parent_hangout_id")
+      .eq("id", data.requestId)
+      .maybeSingle();
+    if (!reqRow) return { ok: false as const };
+    if (reqRow.hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
+    // For join_requests, also ensure the parent public hangout is still active.
+    if (reqRow.parent_hangout_id) {
+      const { data: parent } = await supabaseAdmin
+        .from("requests")
+        .select("hangout_status")
+        .eq("id", reqRow.parent_hangout_id)
+        .maybeSingle();
+      if (!parent || parent.hangout_status !== "active") {
+        return { ok: false as const, error: "hangout_not_active" as const };
+      }
+    }
+
 
     const { data: updated, error } = await supabaseAdmin
       .from("requests")
@@ -700,6 +749,7 @@ export const adminAddInvitees = createServerFn({ method: "POST" })
       .maybeSingle();
     if (hErr || !hangout) return { ok: false as const, error: "not_found" as const };
     if ((hangout as any).initiator !== "ned") return { ok: false as const, error: "not_owner" as const };
+    if ((hangout as any).hangout_status !== "active") return { ok: false as const, error: "hangout_not_active" as const };
 
     const { data: invitees, error: iErr } = await supabaseAdmin
       .from("hangout_invitees")
@@ -770,10 +820,13 @@ export const adminRemoveInvitee = createServerFn({ method: "POST" })
     const { data: hangout } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, title, pitch, start_time, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+        "id, title, pitch, start_time, hangout_status, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
       )
       .eq("id", inv.hangout_id)
       .maybeSingle();
+    if (!hangout || (hangout as any).hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
 
     await supabaseAdmin
       .from("hangout_participants")
@@ -827,10 +880,13 @@ export const adminRemoveJoiner = createServerFn({ method: "POST" })
     const { data: parent } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, title, pitch, start_time, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+        "id, title, pitch, start_time, hangout_status, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
       )
       .eq("id", req.parent_hangout_id ?? "")
       .maybeSingle();
+    if (!parent || (parent as any).hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
 
     await supabaseAdmin
       .from("requests")
@@ -865,4 +921,145 @@ export const adminRemoveJoiner = createServerFn({ method: "POST" })
       }
     }
     return { ok: true as const };
+  });
+
+// --- admin: cancel a hangout (Ned only, final) ---
+// Sets hangout_status='cancelled', writes audit fields, invalidates open
+// change proposals, cascades to public join-request child rows (status only,
+// preserving request_status), and emails every affected participant.
+export const adminCancelHangout = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        adminPassword: z.string().min(1).max(200),
+        hangoutId: z.string().uuid(),
+        comment: z.string().trim().max(2000).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertAdmin(data.adminPassword);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const trimmed = data.comment?.trim() || null;
+
+    const { data: hangout } = await supabaseAdmin
+      .from("requests")
+      .select(
+        "id, slug, title, pitch, start_time, hangout_kind, hangout_status, requester_name, requester_email, custom_venue_name, custom_venue_location, custom_venue_image_url, venue:venues(name, location, image_url)",
+      )
+      .eq("id", data.hangoutId)
+      .maybeSingle();
+    if (!hangout) return { ok: false as const, error: "not_found" as const };
+    if (hangout.hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_terminal" as const };
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const { error: upErr } = await supabaseAdmin
+      .from("requests")
+      .update({
+        hangout_status: "cancelled",
+        cancelled_at: nowIso,
+        cancelled_by: "ned",
+        cancellation_comment: trimmed,
+        updated_at: nowIso,
+      } as any)
+      .eq("id", hangout.id);
+    if (upErr) {
+      console.error("[hangouts] adminCancelHangout update", upErr);
+      return { ok: false as const, error: "update_failed" as const };
+    }
+
+    // Invalidate open change proposals
+    await supabaseAdmin
+      .from("hangout_change_requests")
+      .update({
+        status: "rejected",
+        responder_comment: "Hangout cancelled",
+        responded_at: nowIso,
+      })
+      .eq("hangout_id", hangout.id)
+      .eq("status", "pending");
+
+    // Recipient collection
+    type Recipient = { email: string; name: string; slug: string | null; kind: "invitee" | "requester" };
+    const recipients: Recipient[] = [];
+
+    if (hangout.hangout_kind === "friend_request") {
+      if (hangout.requester_email && hangout.requester_name) {
+        recipients.push({
+          email: hangout.requester_email,
+          name: hangout.requester_name,
+          slug: hangout.slug,
+          kind: "requester",
+        });
+      }
+    } else {
+      // public_hangout or private_hangout: invitees
+      const { data: invs } = await supabaseAdmin
+        .from("hangout_invitees")
+        .select("name, email, slug")
+        .eq("hangout_id", hangout.id);
+      for (const i of invs ?? []) {
+        recipients.push({ email: i.email, name: i.name, slug: i.slug, kind: "invitee" });
+      }
+      // public hangout: also cascade to join-request children + notify joiners
+      if (hangout.hangout_kind === "public_hangout") {
+        const { data: joins } = await supabaseAdmin
+          .from("requests")
+          .select("id, slug, requester_name, requester_email, request_status")
+          .eq("parent_hangout_id", hangout.id)
+          .eq("hangout_kind", "join_request")
+          .eq("hangout_status", "active");
+        const joinIds = (joins ?? []).map((j: any) => j.id);
+        if (joinIds.length) {
+          await supabaseAdmin
+            .from("requests")
+            .update({
+              hangout_status: "cancelled",
+              cancelled_at: nowIso,
+              cancelled_by: "ned",
+              cancellation_comment: trimmed,
+              updated_at: nowIso,
+            } as any)
+            .in("id", joinIds);
+        }
+        for (const j of joins ?? []) {
+          if (!j.requester_email || !j.requester_name) continue;
+          recipients.push({
+            email: j.requester_email,
+            name: j.requester_name,
+            slug: j.slug,
+            kind: "requester",
+          });
+        }
+      }
+    }
+
+    // Emails
+    const v = venueDisplayServer(hangout as any);
+    const venueText = v.name + (v.location ? ` · ${v.location}` : "");
+    const when = fmtRangeServer(hangout.start_time);
+    const title = hangout.title ?? hangout.pitch ?? "Your hangout";
+
+    const results = await Promise.allSettled(
+      recipients.map((r) => {
+        const trackingUrl = r.slug
+          ? `${getOrigin()}/${r.kind === "invitee" ? "i" : "r"}/${r.slug}`
+          : getOrigin();
+        return sendHangoutCancelledEmail({
+          to: r.email,
+          recipientName: r.name,
+          hangoutTitle: title,
+          venue: venueText,
+          when,
+          comment: trimmed,
+          trackingUrl,
+        });
+      }),
+    );
+    const notified = results.filter((r) => r.status === "fulfilled" && (r.value as any).ok).length;
+
+    return { ok: true as const, notified, total: recipients.length };
   });

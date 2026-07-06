@@ -50,13 +50,17 @@ function InvitePage() {
   const { invite, hangout } = data;
   const meta = categoryMeta(hangout.category);
   const v = venueDisplay(hangout);
+  const isCancelled = hangout.hangout_status === "cancelled";
 
   async function submitResponse() {
     if (!choice) return;
     setBusy(true);
     const res = await respond({ data: { slug, response: choice, comment: comment.trim() || null } });
     setBusy(false);
-    if (!res.ok) { toast.error("Couldn't save"); return; }
+    if (!res.ok) {
+      toast.error((res as any).error === "hangout_not_active" ? "This hangout is cancelled" : "Couldn't save");
+      return;
+    }
     setDone(choice);
     toast.success("Thanks — Ned knows");
   }
@@ -71,6 +75,20 @@ function InvitePage() {
 
       <main className="px-5 py-10 sm:px-10">
         <div className="mx-auto max-w-3xl">
+          {isCancelled && (
+            <div className="mb-6 rounded-3xl border-2 border-red-300 bg-red-50 p-5">
+              <div className="flex items-center gap-2 text-red-800 font-medium">
+                <X className="size-4" /> This hangout has been cancelled
+              </div>
+              <p className="mt-1 text-sm text-red-900/80">It will no longer take place. Details below are kept for reference.</p>
+              {hangout.cancellation_comment && (
+                <div className="mt-3 rounded-2xl bg-white/60 border border-red-200 p-3 text-sm text-red-900 italic">
+                  "{hangout.cancellation_comment}"
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="text-xs uppercase tracking-wide text-muted-foreground">{meta.emoji} {meta.label}</div>
           <h1 className="mt-2 font-display text-4xl text-primary sm:text-5xl text-balance">Hi {invite.name} — Ned wants to hang out</h1>
           <p className="mt-3 text-lg text-primary">{hangout.title ?? "A hangout"}</p>
@@ -84,7 +102,17 @@ function InvitePage() {
             </div>
           </div>
 
-          {done ? (
+          {isCancelled ? (
+            <div className="mt-8 rounded-3xl bg-card border border-border/60 p-6 shadow-soft">
+              <h2 className="font-display text-2xl text-primary">Your reply</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {done
+                  ? `You replied: ${done === "accepted" ? "✅ Yes" : done === "maybe" ? "🤔 Maybe" : "❌ No"}. `
+                  : "You didn't reply before this was cancelled. "}
+                No further action needed.
+              </p>
+            </div>
+          ) : done ? (
             <div className="mt-8 rounded-3xl bg-card border border-border/60 p-6 shadow-soft">
               <h2 className="font-display text-2xl text-primary">
                 You replied: {done === "accepted" ? "✅ Yes" : done === "maybe" ? "🤔 Maybe" : "❌ No"}

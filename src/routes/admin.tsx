@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ADMIN_PASSWORD, ADMIN_STORAGE_KEY, CATEGORIES, categoryMeta, fmtRange, londonLocalToIso, venueDisplay } from "@/lib/nedate";
-import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles, Send, Mail, UserPlus } from "lucide-react";
+import { Check, Loader2, LogOut, Plus, Trash2, X, ChevronDown, ChevronRight, Sparkles, Send, Mail, UserPlus, Ban } from "lucide-react";
 import { toast } from "sonner";
 import {
   createHangout,
@@ -14,6 +14,7 @@ import {
   adminAddInvitees,
   adminRemoveInvitee,
   adminRemoveJoiner,
+  adminCancelHangout,
 } from "@/lib/hangouts.functions";
 
 import {
@@ -43,6 +44,7 @@ type Hangout = {
   request_message: string | null;
   start_time: string; end_time: string | null;
   admin_comment: string | null;
+  cancelled_at: string | null; cancelled_by: string | null; cancellation_comment: string | null;
   parent_hangout_id: string | null;
   custom_venue_name: string | null; custom_venue_location: string | null; custom_venue_image_url: string | null;
   created_at: string;
@@ -190,13 +192,17 @@ function RequestGrid({ items, onOpen, parentLookup }: { items: Hangout[]; onOpen
     <div className="grid gap-3 md:grid-cols-2">
       {items.map((r) => {
         const parent = r.parent_hangout_id ? parentLookup?.[r.parent_hangout_id] : null;
+        const isCancelled = r.hangout_status === "cancelled";
         return (
-          <button key={r.id} onClick={() => onOpen(r)} className="text-left rounded-2xl bg-card border border-border/60 p-5 shadow-soft hover:border-primary/40 transition">
-            <div className="flex items-center justify-between">
+          <button key={r.id} onClick={() => onOpen(r)} className={`text-left rounded-2xl bg-card border border-border/60 p-5 shadow-soft hover:border-primary/40 transition ${isCancelled ? "opacity-70" : ""}`}>
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(r.category).emoji} {categoryMeta(r.category).label}</span>
-              <StatusPill status={r.request_status ?? "pending"} />
+              <div className="flex items-center gap-1.5">
+                {isCancelled && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-red-100 text-red-800 font-medium">Cancelled</span>}
+                <StatusPill status={r.request_status ?? "pending"} />
+              </div>
             </div>
-            <div className="mt-2 font-display text-lg text-primary">{r.requester_name}</div>
+            <div className={`mt-2 font-display text-lg text-primary ${isCancelled ? "line-through" : ""}`}>{r.requester_name}</div>
             {parent && <div className="text-xs text-muted-foreground">↳ joining: {parent.title ?? "your hangout"}</div>}
             <div className="text-sm text-muted-foreground line-clamp-2 mt-0.5">"{r.request_message ?? r.pitch}"</div>
             <div className="mt-3 text-xs text-muted-foreground">{fmtRange(r.start_time, r.end_time)}</div>
@@ -216,9 +222,13 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
   const [open, setOpen] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
   const removeInv = useServerFn(adminRemoveInvitee);
   const removeJoin = useServerFn(adminRemoveJoiner);
   const v = venueDisplay(h);
+  const isCancelled = h.hangout_status === "cancelled";
+  const isCompleted = h.hangout_status === "completed";
+  const isActive = h.hangout_status === "active";
 
   async function handleRemoveInvitee(inv: Invitee) {
     if (!confirm(`Remove ${inv.name} from this hangout? They'll be notified by email.`)) return;
@@ -236,30 +246,49 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
   }
 
   return (
-    <div className="rounded-2xl bg-card border border-border/60 shadow-soft">
+    <div className={`rounded-2xl bg-card border border-border/60 shadow-soft ${isCancelled ? "opacity-70" : ""}`}>
       <div className="w-full flex items-center gap-3 p-4">
         <button onClick={() => setOpen(o => !o)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           {open ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(h.category).emoji} {categoryMeta(h.category).label}</span>
               <span className={`text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide ${h.visibility === "public" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground"}`}>{h.visibility}</span>
+              {isCancelled && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-red-100 text-red-800 font-medium">Cancelled</span>}
+              {isCompleted && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-muted text-muted-foreground">Completed</span>}
             </div>
-            <div className="mt-0.5 font-display text-lg text-primary truncate">{h.title}</div>
+            <div className={`mt-0.5 font-display text-lg text-primary truncate ${isCancelled ? "line-through" : ""}`}>{h.title}</div>
             <div className="text-xs text-muted-foreground">{fmtRange(h.start_time)} · {v.name}</div>
           </div>
           <div className="text-xs text-muted-foreground hidden sm:block">{invitees.length} invited{joinRequests.length ? ` · ${joinRequests.length} requests` : ""}</div>
         </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); setShowBulk(true); }}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-primary hover:bg-muted"
-          title="Send a message to people in this hangout"
-        >
-          <Mail className="size-3.5" /> Message
-        </button>
+        {isActive && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowBulk(true); }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-primary hover:bg-muted"
+              title="Send a message to people in this hangout"
+            >
+              <Mail className="size-3.5" /> Message
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowCancel(true); }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-card px-3 py-1.5 text-xs text-red-700 hover:bg-red-50"
+              title="Cancel this hangout"
+            >
+              <Ban className="size-3.5" /> Cancel
+            </button>
+          </>
+        )}
       </div>
       {open && (
         <div className="border-t border-border/60 p-4 space-y-4">
+          {isCancelled && (
+            <div className="rounded-2xl bg-red-50 border border-red-200 p-4">
+              <div className="text-xs font-medium text-red-800 uppercase tracking-wide">Cancelled{h.cancelled_at ? ` · ${new Date(h.cancelled_at).toLocaleString("en-GB")}` : ""}</div>
+              {h.cancellation_comment && <div className="mt-1 text-sm text-red-900 italic">"{h.cancellation_comment}"</div>}
+            </div>
+          )}
           {h.pitch && <p className="text-sm italic text-muted-foreground">"{h.pitch}"</p>}
           {h.visibility === "public" && (
             <div className="text-xs text-muted-foreground">Public link: <Link to="/join/$slug" params={{ slug: h.slug }} className="underline">/join/{h.slug}</Link></div>
@@ -267,7 +296,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-medium text-primary uppercase tracking-wide">Invitees ({invitees.length})</div>
-              <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><UserPlus className="size-3.5" /> Add invitees</button>
+              {isActive && <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><UserPlus className="size-3.5" /> Add invitees</button>}
             </div>
             {invitees.length === 0 ? <Empty>No invitees.</Empty> : (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -277,7 +306,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
                       <div className="font-medium text-primary truncate">{i.name}</div>
                       <div className="flex items-center gap-1.5">
                         <InviteePill status={i.response_status} />
-                        <button onClick={() => handleRemoveInvitee(i)} title="Remove invitee" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>
+                        {isActive && <button onClick={() => handleRemoveInvitee(i)} title="Remove invitee" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>}
                       </div>
                     </div>
                     <div className="text-xs text-muted-foreground truncate">{i.email}</div>
@@ -300,7 +329,7 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
                       </button>
                       <div className="flex items-center gap-1.5">
                         <StatusPill status={j.request_status ?? "pending"} />
-                        <button onClick={() => handleRemoveJoiner(j)} title="Remove joiner" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>
+                        {isActive && <button onClick={() => handleRemoveJoiner(j)} title="Remove joiner" className="rounded-full p-1 text-muted-foreground hover:text-destructive hover:bg-muted"><Trash2 className="size-3.5" /></button>}
                       </div>
                     </div>
                     <button onClick={() => onOpenRequest(j)} className="text-left w-full">
@@ -331,6 +360,13 @@ function NedHangoutRow({ h, invitees, joinRequests, onOpenRequest, onChanged }: 
           onAdded={() => { setShowAdd(false); onChanged(); }}
         />
       )}
+      {showCancel && (
+        <CancelHangoutModal
+          hangout={h}
+          onClose={() => setShowCancel(false)}
+          onCancelled={() => { setShowCancel(false); onChanged(); }}
+        />
+      )}
     </div>
   );
 }
@@ -349,8 +385,11 @@ function InviteePill({ status }: { status: string }) {
 function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () => void; onUpdated: () => void }) {
   const [comment, setComment] = useState(req.admin_comment ?? "");
   const [saving, setSaving] = useState<string | null>(null);
+  const [showCancel, setShowCancel] = useState(false);
   const v = venueDisplay(req);
   const updateStatus = useServerFn(adminUpdateRequestStatus);
+  const isCancelled = req.hangout_status === "cancelled";
+  const isActive = req.hangout_status === "active";
 
   async function decide(status: "approved" | "rejected") {
     setSaving(status);
@@ -390,25 +429,43 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
         <div className="mt-4 grid gap-2 text-sm">
           <div><span className="text-muted-foreground">When: </span>{fmtRange(req.start_time, req.end_time)}</div>
           <div><span className="text-muted-foreground">Where: </span>{v.name}{v.location ? ` · ${v.location}` : ""}</div>
-          <div><span className="text-muted-foreground">Status: </span><StatusPill status={req.request_status ?? "pending"} /></div>
+          <div>
+            <span className="text-muted-foreground">Status: </span>
+            <StatusPill status={req.request_status ?? "pending"} />
+            {isCancelled && <span className="ml-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-red-100 text-red-800">Cancelled</span>}
+          </div>
           <div className="text-xs text-muted-foreground pt-1">
             Link: <Link to="/r/$slug" params={{ slug: req.slug }} className="underline">/r/{req.slug}</Link>
           </div>
         </div>
 
-        <label className="mt-5 block">
-          <span className="text-sm font-medium text-primary">Note for {req.requester_name ?? "them"} (sent in email)</span>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary" placeholder="Looking forward to it!" />
-        </label>
+        {isCancelled && (
+          <div className="mt-5 rounded-2xl bg-red-50 border border-red-200 p-4">
+            <div className="text-xs font-medium text-red-800 uppercase tracking-wide">Cancelled{req.cancelled_at ? ` · ${new Date(req.cancelled_at).toLocaleString("en-GB")}` : ""}</div>
+            {req.cancellation_comment && <div className="mt-1 text-sm text-red-900 italic">"{req.cancellation_comment}"</div>}
+          </div>
+        )}
 
-        <div className="mt-5 flex gap-2 justify-end">
-          <button disabled={!!saving} onClick={() => decide("rejected")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm hover:bg-muted disabled:opacity-50">
-            {saving === "rejected" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />} Decline
-          </button>
-          <button disabled={!!saving} onClick={() => decide("approved")} className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-            {saving === "approved" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Approve
-          </button>
-        </div>
+        {isActive && (
+          <>
+            <label className="mt-5 block">
+              <span className="text-sm font-medium text-primary">Note for {req.requester_name ?? "them"} (sent in email)</span>
+              <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary" placeholder="Looking forward to it!" />
+            </label>
+
+            <div className="mt-5 flex gap-2 justify-end flex-wrap">
+              <button onClick={() => setShowCancel(true)} className="inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-card px-5 py-2.5 text-sm text-red-700 hover:bg-red-50 mr-auto">
+                <Ban className="size-4" /> Cancel hangout
+              </button>
+              <button disabled={!!saving} onClick={() => decide("rejected")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm hover:bg-muted disabled:opacity-50">
+                {saving === "rejected" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />} Decline
+              </button>
+              <button disabled={!!saving} onClick={() => decide("approved")} className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                {saving === "approved" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Approve
+              </button>
+            </div>
+          </>
+        )}
 
         {req.hangout_kind === "friend_request" && (
           <div className="mt-6">
@@ -416,6 +473,13 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
           </div>
         )}
       </div>
+      {showCancel && (
+        <CancelHangoutModal
+          hangout={req}
+          onClose={() => setShowCancel(false)}
+          onCancelled={() => { setShowCancel(false); onUpdated(); }}
+        />
+      )}
     </div>
   );
 }
@@ -1080,6 +1144,81 @@ function AddInviteesModal({
           <button type="button" onClick={onClose} className="rounded-full border border-border px-5 py-2.5 text-sm hover:bg-muted">Cancel</button>
           <button disabled={busy} className="rounded-full bg-primary px-6 py-2.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-2">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Invite
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ===== Cancel hangout modal =====
+function CancelHangoutModal({
+  hangout,
+  onClose,
+  onCancelled,
+}: {
+  hangout: Hangout;
+  onClose: () => void;
+  onCancelled: () => void;
+}) {
+  const cancelFn = useServerFn(adminCancelHangout);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    const res = await cancelFn({
+      data: {
+        adminPassword: ADMIN_PASSWORD,
+        hangoutId: hangout.id,
+        comment: comment.trim() || null,
+      },
+    });
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(
+        res.error === "hangout_terminal"
+          ? "This hangout is already closed"
+          : "Couldn't cancel",
+      );
+      return;
+    }
+    toast.success(`Cancelled · ${res.notified}/${res.total} notified`);
+    onCancelled();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-3xl bg-card border border-border/60 p-7 shadow-warm">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-display text-2xl text-primary flex items-center gap-2"><Ban className="size-5 text-red-600" /> Cancel hangout</h2>
+            <p className="text-sm text-muted-foreground truncate">{hangout.title ?? hangout.pitch ?? "Hangout"}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted"><X className="size-4" /></button>
+        </div>
+
+        <p className="text-sm text-foreground">
+          This will cancel the hangout and notify all affected participants.
+        </p>
+
+        <label className="block mt-5">
+          <span className="text-sm font-medium text-primary">Note to participants (optional)</span>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={4}
+            maxLength={2000}
+            placeholder="Something came up — sorry for the change of plans."
+            className="mt-1.5 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary resize-none"
+          />
+        </label>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-full border border-border px-5 py-2.5 text-sm hover:bg-muted">Keep hangout</button>
+          <button disabled={busy} className="rounded-full bg-red-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-2">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />} Cancel hangout
           </button>
         </div>
       </form>

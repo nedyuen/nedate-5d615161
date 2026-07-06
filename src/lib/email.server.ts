@@ -331,3 +331,40 @@ export function sendRemovedFromHangoutEmail(data: {
     html,
   });
 }
+
+export function sendHangoutCancelledEmail(data: {
+  to: string;
+  recipientName: string;
+  hangoutTitle: string;
+  venue: string;
+  when: string;
+  comment?: string | null;
+  trackingUrl: string;
+}): SendResult {
+  const note = data.comment
+    ? `<div style="margin-top:18px;background:#FBF2DC;border:1px solid #F0DDA8;border-radius:16px;padding:16px 18px;font-size:14px;color:#222;">
+         <div style="color:#1E4D3D;font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;">A note from Ned</div>
+         <div style="margin-top:6px;">${esc(data.comment)}</div>
+       </div>`
+    : "";
+  const html = wrap(
+    `This hangout has been cancelled`,
+    `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;">Hi ${esc(data.recipientName)} — Ned has cancelled <strong>${esc(data.hangoutTitle)}</strong>. It will no longer take place.</p>
+     ${note}
+     <div style="margin-top:18px;background:#F8F5EE;border-radius:16px;padding:16px 18px;font-size:14px;">
+       <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">Was scheduled for</div>
+       <div style="margin-top:2px;">${esc(data.when)}</div>
+       <div style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-top:12px;">At</div>
+       <div style="margin-top:2px;">${esc(data.venue)}</div>
+     </div>
+     ${btn(data.trackingUrl, "View details")}
+     <p style="margin:18px 0 0;font-size:13px;color:#666;">Sorry for the change of plans. Catch you on another one soon.</p>`,
+  );
+  return sendViaResend({
+    from: FROM,
+    to: [data.to],
+    bcc: [BCC],
+    subject: `Cancelled: ${data.hangoutTitle}`,
+    html,
+  });
+}

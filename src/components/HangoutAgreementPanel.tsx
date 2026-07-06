@@ -78,8 +78,8 @@ export function HangoutAgreementPanel({ actor }: { actor: Actor }) {
       </div>
 
 
-      {/* Reconfirmation banner */}
-      {viewer.needs_reconfirmation && (viewer.type === "invitee" || viewer.type === "attendee") && (
+      {/* Reconfirmation banner (hidden when terminal) */}
+      {!terminal && viewer.needs_reconfirmation && (viewer.type === "invitee" || viewer.type === "attendee") && (
         <ReconfirmBanner actor={actor} onDone={reload} />
       )}
 
