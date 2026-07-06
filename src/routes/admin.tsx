@@ -91,7 +91,11 @@ function AdminPage() {
 }
 
 function AdminInner({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"hangouts" | "venues" | "contacts">("hangouts");
+  const [tab, setTab] = useState<"hangouts" | "venues" | "contacts" | "people">("hangouts");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash.startsWith("#hangout-")) setTab("hangouts");
+  }, []);
   return (
     <div className="min-h-screen bg-background">
       <header className="px-5 pt-6 sm:px-10">
@@ -99,17 +103,17 @@ function AdminInner({ onLogout }: { onLogout: () => void }) {
           <Link to="/" className="font-display text-2xl text-primary">Nedate</Link>
           <button onClick={onLogout} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary"><LogOut className="size-4" /> Log out</button>
         </div>
-        <div className="mx-auto max-w-6xl mt-8 flex items-center gap-2 border-b border-border/60">
-          {(["hangouts", "venues", "contacts"] as const).map((t) => (
+        <div className="mx-auto max-w-6xl mt-8 flex items-center gap-2 border-b border-border/60 flex-wrap">
+          {(["hangouts", "people", "venues", "contacts"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition ${tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary"}`}>
-              {t === "hangouts" ? "Hangouts" : t === "venues" ? "Venues & ideas" : "Contacts"}
+              {t === "hangouts" ? "Hangouts" : t === "people" ? "People" : t === "venues" ? "Venues & ideas" : "Contacts"}
             </button>
           ))}
         </div>
       </header>
       <main className="px-5 py-8 sm:px-10">
         <div className="mx-auto max-w-6xl">
-          {tab === "hangouts" ? <HangoutsTab /> : tab === "venues" ? <VenuesTab /> : <ContactsTab />}
+          {tab === "hangouts" ? <HangoutsTab /> : tab === "people" ? <PeopleTab onOpenHangout={(id) => { setTab("hangouts"); requestAnimationFrame(() => { window.location.hash = `hangout-${id}`; document.getElementById(`hangout-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }); }} /> : tab === "venues" ? <VenuesTab /> : <ContactsTab />}
         </div>
       </main>
     </div>
