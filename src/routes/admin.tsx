@@ -113,7 +113,7 @@ function AdminInner({ onLogout }: { onLogout: () => void }) {
       </header>
       <main className="px-5 py-8 sm:px-10">
         <div className="mx-auto max-w-6xl">
-          {tab === "hangouts" ? <HangoutsTab /> : tab === "people" ? <PeopleTab onOpenHangout={(id) => { setTab("hangouts"); requestAnimationFrame(() => { window.location.hash = `hangout-${id}`; document.getElementById(`hangout-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }); }} /> : tab === "venues" ? <VenuesTab /> : <ContactsTab />}
+          {tab === "hangouts" ? <HangoutsTab /> : tab === "people" ? <PeopleTab onOpenHangout={(id: string) => { setTab("hangouts"); requestAnimationFrame(() => { window.location.hash = `hangout-${id}`; document.getElementById(`hangout-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }); }} /> : tab === "venues" ? <VenuesTab /> : <ContactsTab />}
         </div>
       </main>
     </div>
