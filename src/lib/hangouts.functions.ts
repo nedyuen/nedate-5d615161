@@ -546,7 +546,7 @@ export const getRequestTracking = createServerFn({ method: "GET" })
     const { data: row, error } = await supabaseAdmin
       .from("requests")
       .select(
-        "id, slug, category, requester_name, pitch, start_time, end_time, request_status, hangout_kind, hangout_status, admin_comment, cancelled_at, cancellation_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, parent_hangout_id, request_message, venue:venues(name, location, image_url)",
+        "id, slug, category, requester_name, pitch, start_time, end_time, request_status, hangout_kind, hangout_status, schedule_status, admin_comment, cancelled_at, cancellation_comment, custom_venue_name, custom_venue_location, custom_venue_image_url, parent_hangout_id, request_message, venue:venues(name, location, image_url)",
       )
       .eq("slug", data.slug)
       .maybeSingle();
