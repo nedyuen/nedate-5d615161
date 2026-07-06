@@ -381,8 +381,11 @@ function InviteePill({ status }: { status: string }) {
 function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () => void; onUpdated: () => void }) {
   const [comment, setComment] = useState(req.admin_comment ?? "");
   const [saving, setSaving] = useState<string | null>(null);
+  const [showCancel, setShowCancel] = useState(false);
   const v = venueDisplay(req);
   const updateStatus = useServerFn(adminUpdateRequestStatus);
+  const isCancelled = req.hangout_status === "cancelled";
+  const isActive = req.hangout_status === "active";
 
   async function decide(status: "approved" | "rejected") {
     setSaving(status);
