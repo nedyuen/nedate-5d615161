@@ -628,6 +628,30 @@ export const adminUpdateRequestStatus = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const trimmed = data.comment?.trim() || null;
 
+    // Enforce active-only rule: cannot approve/reject a request on a
+    // cancelled or completed hangout.
+    const { data: reqRow } = await supabaseAdmin
+      .from("requests")
+      .select("hangout_status, parent_hangout_id")
+      .eq("id", data.requestId)
+      .maybeSingle();
+    if (!reqRow) return { ok: false as const };
+    if (reqRow.hangout_status !== "active") {
+      return { ok: false as const, error: "hangout_not_active" as const };
+    }
+    // For join_requests, also ensure the parent public hangout is still active.
+    if (reqRow.parent_hangout_id) {
+      const { data: parent } = await supabaseAdmin
+        .from("requests")
+        .select("hangout_status")
+        .eq("id", reqRow.parent_hangout_id)
+        .maybeSingle();
+      if (!parent || parent.hangout_status !== "active") {
+        return { ok: false as const, error: "hangout_not_active" as const };
+      }
+    }
+
+
     const { data: updated, error } = await supabaseAdmin
       .from("requests")
       .update({
