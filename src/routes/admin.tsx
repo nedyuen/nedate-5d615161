@@ -425,25 +425,43 @@ function RequestModal({ req, onClose, onUpdated }: { req: Hangout; onClose: () =
         <div className="mt-4 grid gap-2 text-sm">
           <div><span className="text-muted-foreground">When: </span>{fmtRange(req.start_time, req.end_time)}</div>
           <div><span className="text-muted-foreground">Where: </span>{v.name}{v.location ? ` · ${v.location}` : ""}</div>
-          <div><span className="text-muted-foreground">Status: </span><StatusPill status={req.request_status ?? "pending"} /></div>
+          <div>
+            <span className="text-muted-foreground">Status: </span>
+            <StatusPill status={req.request_status ?? "pending"} />
+            {isCancelled && <span className="ml-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-red-100 text-red-800">Cancelled</span>}
+          </div>
           <div className="text-xs text-muted-foreground pt-1">
             Link: <Link to="/r/$slug" params={{ slug: req.slug }} className="underline">/r/{req.slug}</Link>
           </div>
         </div>
 
-        <label className="mt-5 block">
-          <span className="text-sm font-medium text-primary">Note for {req.requester_name ?? "them"} (sent in email)</span>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary" placeholder="Looking forward to it!" />
-        </label>
+        {isCancelled && (
+          <div className="mt-5 rounded-2xl bg-red-50 border border-red-200 p-4">
+            <div className="text-xs font-medium text-red-800 uppercase tracking-wide">Cancelled{req.cancelled_at ? ` · ${new Date(req.cancelled_at).toLocaleString("en-GB")}` : ""}</div>
+            {req.cancellation_comment && <div className="mt-1 text-sm text-red-900 italic">"{req.cancellation_comment}"</div>}
+          </div>
+        )}
 
-        <div className="mt-5 flex gap-2 justify-end">
-          <button disabled={!!saving} onClick={() => decide("rejected")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm hover:bg-muted disabled:opacity-50">
-            {saving === "rejected" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />} Decline
-          </button>
-          <button disabled={!!saving} onClick={() => decide("approved")} className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-            {saving === "approved" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Approve
-          </button>
-        </div>
+        {isActive && (
+          <>
+            <label className="mt-5 block">
+              <span className="text-sm font-medium text-primary">Note for {req.requester_name ?? "them"} (sent in email)</span>
+              <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary" placeholder="Looking forward to it!" />
+            </label>
+
+            <div className="mt-5 flex gap-2 justify-end flex-wrap">
+              <button onClick={() => setShowCancel(true)} className="inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-card px-5 py-2.5 text-sm text-red-700 hover:bg-red-50 mr-auto">
+                <Ban className="size-4" /> Cancel hangout
+              </button>
+              <button disabled={!!saving} onClick={() => decide("rejected")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm hover:bg-muted disabled:opacity-50">
+                {saving === "rejected" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />} Decline
+              </button>
+              <button disabled={!!saving} onClick={() => decide("approved")} className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                {saving === "approved" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Approve
+              </button>
+            </div>
+          </>
+        )}
 
         {req.hangout_kind === "friend_request" && (
           <div className="mt-6">
