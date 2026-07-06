@@ -200,19 +200,21 @@ function RequestGrid({ items, onOpen, parentLookup }: { items: Hangout[]; onOpen
       {items.map((r) => {
         const parent = r.parent_hangout_id ? parentLookup?.[r.parent_hangout_id] : null;
         const isCancelled = r.hangout_status === "cancelled";
+        const isUnscheduled = r.schedule_status === "unscheduled";
         return (
           <button key={r.id} onClick={() => onOpen(r)} className={`text-left rounded-2xl bg-card border border-border/60 p-5 shadow-soft hover:border-primary/40 transition ${isCancelled ? "opacity-70" : ""}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(r.category).emoji} {categoryMeta(r.category).label}</span>
               <div className="flex items-center gap-1.5">
                 {isCancelled && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-red-100 text-red-800 font-medium">Cancelled</span>}
+                {isUnscheduled && !isCancelled && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-accent/40 text-primary font-medium">Awaiting time</span>}
                 <StatusPill status={r.request_status ?? "pending"} />
               </div>
             </div>
             <div className={`mt-2 font-display text-lg text-primary ${isCancelled ? "line-through" : ""}`}>{r.requester_name}</div>
             {parent && <div className="text-xs text-muted-foreground">↳ joining: {parent.title ?? "your hangout"}</div>}
             <div className="text-sm text-muted-foreground line-clamp-2 mt-0.5">"{r.request_message ?? r.pitch}"</div>
-            <div className="mt-3 text-xs text-muted-foreground">{fmtRange(r.start_time, r.end_time)}</div>
+            <div className="mt-3 text-xs text-muted-foreground">{isUnscheduled ? "Not decided yet" : fmtRange(r.start_time, r.end_time)}</div>
           </button>
         );
       })}
