@@ -14,9 +14,10 @@ export const Route = createFileRoute("/r/$slug")({
 
 type Req = {
   id: string; slug: string; category: string; requester_name: string | null; pitch: string | null;
-  start_time: string; end_time: string | null; request_status: string | null;
+  start_time: string | null; end_time: string | null; request_status: string | null;
   hangout_kind: string; admin_comment: string | null;
   hangout_status?: string | null;
+  schedule_status?: string | null;
   cancelled_at?: string | null; cancellation_comment?: string | null;
   custom_venue_name: string | null; custom_venue_location: string | null; custom_venue_image_url: string | null;
   parent_hangout_id: string | null; request_message: string | null;
