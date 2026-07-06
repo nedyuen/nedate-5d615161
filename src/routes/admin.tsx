@@ -1231,3 +1231,283 @@ function CancelHangoutModal({
     </div>
   );
 }
+
+// -----------------------------------------------------------------------------
+// People tab — relationship timeline (read-only)
+// -----------------------------------------------------------------------------
+
+type PersonSummary = {
+  email: string;
+  display_name: string | null;
+  total: number;
+  completed: number;
+  cancelled: number;
+  upcoming: number;
+  latest_hangout_record: { id: string; title: string | null; category: string; venue_name: string | null; start_time: string | null; created_at: string; hangout_status: string } | null;
+  last_completed_hangout: { id: string; title: string | null; category: string; venue_name: string | null; start_time: string | null; created_at: string; hangout_status: string } | null;
+};
+
+function fmtDay(iso: string | null | undefined) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" });
+}
+function fmtMonth(iso: string | null | undefined) {
+  if (!iso) return "Undated";
+  return new Date(iso).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Europe/London" });
+}
+
+function PeopleTab({ onOpenHangout }: { onOpenHangout: (id: string) => void }) {
+  const list = useServerFn(listPeople);
+  const [people, setPeople] = useState<PersonSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+  const [activeEmail, setActiveEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    list({ data: { adminPassword: ADMIN_PASSWORD } })
+      .then((r: any) => setPeople(r.people ?? []))
+      .finally(() => setLoading(false));
+  }, [list]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return people;
+    return people.filter((p) => {
+      const name = (p.display_name ?? "").toLowerCase();
+      return p.email.includes(needle) || name.includes(needle);
+    });
+  }, [q, people]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h2 className="font-display text-3xl text-primary flex items-center gap-2"><Users className="size-6" /> People</h2>
+        <div className="relative">
+          <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by name or email"
+            className="pl-9 pr-3 py-2 rounded-full border border-input bg-background text-sm w-72 outline-none focus:border-primary"
+          />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-muted-foreground">Loading…</div>
+      ) : filtered.length === 0 ? (
+        <Empty>{people.length === 0 ? "No people yet." : "No matches."}</Empty>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {filtered.map((p) => {
+            const name = displayNameFor(p.display_name, p.email);
+            const latest = p.latest_hangout_record;
+            const lastCompleted = p.last_completed_hangout;
+            return (
+              <div key={p.email} className="rounded-2xl bg-card border border-border/60 p-5 shadow-soft">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-display text-lg text-primary truncate">{name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{p.email}</div>
+                  </div>
+                  <button
+                    onClick={() => setActiveEmail(p.email)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-primary hover:bg-muted whitespace-nowrap"
+                  >
+                    <History className="size-3.5" /> View history
+                  </button>
+                </div>
+                <div className="mt-3 text-xs text-muted-foreground">
+                  {p.total} hangouts · {p.completed} completed · {p.cancelled} cancelled · {p.upcoming} upcoming
+                </div>
+                {latest && (
+                  <div className="mt-2 text-xs text-foreground">
+                    <span className="text-muted-foreground">Latest:</span> {categoryMeta(latest.category).emoji} {latest.title ?? latest.venue_name ?? "—"}
+                    {latest.start_time ? ` — ${fmtDay(latest.start_time)}` : ""}
+                    <span className="ml-1.5 text-muted-foreground">({latest.hangout_status})</span>
+                  </div>
+                )}
+                {lastCompleted && lastCompleted.id !== latest?.id && (
+                  <div className="mt-1 text-xs text-foreground">
+                    <span className="text-muted-foreground">Last completed:</span> {categoryMeta(lastCompleted.category).emoji} {lastCompleted.title ?? lastCompleted.venue_name ?? "—"}
+                    {lastCompleted.start_time ? ` — ${fmtDay(lastCompleted.start_time)}` : ""}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {activeEmail && (
+        <PersonHistoryModal
+          email={activeEmail}
+          onClose={() => setActiveEmail(null)}
+          onOpenHangout={(id) => { setActiveEmail(null); onOpenHangout(id); }}
+        />
+      )}
+    </div>
+  );
+}
+
+type PersonHangoutItem = {
+  id: string;
+  title: string | null;
+  category: string;
+  hangout_kind: string;
+  visibility: string;
+  hangout_status: string;
+  start_time: string | null;
+  end_time: string | null;
+  created_at: string;
+  cancelled_at: string | null;
+  cancellation_comment: string | null;
+  venue: { name: string; location: string | null; image_url: string | null };
+  role: string;
+  source: string;
+  changes: { pending: number; approved: number; rejected: number; total: number; latest_resolved: { status: string; responded_at: string | null } | null };
+};
+
+function PersonHistoryModal({ email, onClose, onOpenHangout }: { email: string; onClose: () => void; onOpenHangout: (id: string) => void }) {
+  const fetchHistory = useServerFn(getPersonHistory);
+  const [data, setData] = useState<{ person: { email: string; display_name: string | null } | null; hangouts: PersonHangoutItem[] } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchHistory({ data: { adminPassword: ADMIN_PASSWORD, email } })
+      .then((r: any) => setData(r))
+      .finally(() => setLoading(false));
+  }, [fetchHistory, email]);
+
+  const grouped = useMemo(() => {
+    if (!data) return [] as { label: string; items: PersonHangoutItem[] }[];
+    const groups = new Map<string, PersonHangoutItem[]>();
+    for (const h of data.hangouts) {
+      const label = fmtMonth(h.start_time ?? h.created_at);
+      const arr = groups.get(label) ?? [];
+      arr.push(h);
+      groups.set(label, arr);
+    }
+    return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
+  }, [data]);
+
+  const person = data?.person;
+  const hangouts = data?.hangouts ?? [];
+  const total = hangouts.length;
+  const completed = hangouts.filter((h) => h.hangout_status === "completed").length;
+  const cancelled = hangouts.filter((h) => h.hangout_status === "cancelled").length;
+  const nowIso = new Date().toISOString();
+  const upcoming = hangouts.filter((h) => h.hangout_status === "active" && h.start_time && h.start_time >= nowIso).length;
+  const latest = hangouts[0] ?? null;
+  const lastCompleted = hangouts.find((h) => h.hangout_status === "completed") ?? null;
+  const displayName = person ? displayNameFor(person.display_name, person.email) : email;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-3xl rounded-3xl bg-card border border-border/60 p-7 shadow-warm max-h-[90vh] overflow-auto">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="font-display text-3xl text-primary truncate">{displayName}</h2>
+            <a href={`mailto:${email}`} className="text-sm text-muted-foreground hover:text-primary break-all">{email}</a>
+          </div>
+          <button onClick={onClose} className="rounded-full p-2 hover:bg-muted shrink-0"><X className="size-4" /></button>
+        </div>
+
+        {loading ? (
+          <div className="mt-6 text-muted-foreground">Loading…</div>
+        ) : (
+          <>
+            <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <StatCard label="Total" value={total} />
+              <StatCard label="Completed" value={completed} />
+              <StatCard label="Upcoming" value={upcoming} />
+              <StatCard label="Cancelled" value={cancelled} />
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {latest && (
+                <div className="rounded-2xl bg-background border border-border/60 p-4">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Latest hangout</div>
+                  <div className="mt-1 text-sm text-foreground">
+                    {categoryMeta(latest.category).emoji} {latest.title ?? latest.venue.name ?? "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{latest.start_time ? fmtDay(latest.start_time) : "Undated"} · {latest.hangout_status}</div>
+                </div>
+              )}
+              {lastCompleted && (
+                <div className="rounded-2xl bg-background border border-border/60 p-4">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Last completed</div>
+                  <div className="mt-1 text-sm text-foreground">
+                    {categoryMeta(lastCompleted.category).emoji} {lastCompleted.title ?? lastCompleted.venue.name ?? "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{lastCompleted.start_time ? fmtDay(lastCompleted.start_time) : "Undated"}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6">
+              {hangouts.length === 0 ? (
+                <Empty>No hangouts on record.</Empty>
+              ) : (
+                <div className="space-y-6">
+                  {grouped.map((g) => (
+                    <div key={g.label}>
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{g.label}</div>
+                      <div className="space-y-2">
+                        {g.items.map((h) => (
+                          <button
+                            key={h.id}
+                            onClick={() => onOpenHangout(h.id)}
+                            className="w-full text-left rounded-2xl border border-border/60 bg-background p-4 hover:border-primary/40 transition"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs uppercase tracking-wide text-muted-foreground">{categoryMeta(h.category).emoji} {categoryMeta(h.category).label}</span>
+                              <HangoutStatusPill status={h.hangout_status} />
+                              <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-muted text-muted-foreground">{h.role} · via {String(h.source).replace(/_/g, " ")}</span>
+                              {h.visibility === "public" && <span className="text-[10px] rounded-full px-2 py-0.5 uppercase tracking-wide bg-emerald-100 text-emerald-800">public</span>}
+                            </div>
+                            <div className="mt-1 font-display text-lg text-primary">{h.title ?? h.venue.name ?? "Untitled"}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {h.venue.name}{h.venue.location ? ` · ${h.venue.location}` : ""} · {h.start_time ? fmtRange(h.start_time, h.end_time) : `Requested ${fmtDay(h.created_at)}`}
+                            </div>
+                            {h.changes.total > 0 && (
+                              <div className="mt-2 text-[11px] text-muted-foreground">
+                                Changes: {h.changes.pending} pending · {h.changes.approved} approved · {h.changes.rejected} rejected
+                                {h.changes.latest_resolved && (
+                                  <> · latest {h.changes.latest_resolved.status}{h.changes.latest_resolved.responded_at ? ` ${fmtDay(h.changes.latest_resolved.responded_at)}` : ""}</>
+                                )}
+                              </div>
+                            )}
+                            {h.hangout_status === "cancelled" && h.cancellation_comment && (
+                              <div className="mt-2 text-xs italic text-red-800">"{h.cancellation_comment}"</div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-background border border-border/60 p-4">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 font-display text-2xl text-primary">{value}</div>
+    </div>
+  );
+}
+
+function HangoutStatusPill({ status }: { status: string }) {
+  const cls =
+    status === "completed" ? "bg-muted text-muted-foreground" :
+    status === "cancelled" ? "bg-red-100 text-red-800" :
+    "bg-emerald-100 text-emerald-800";
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${cls}`}>{status}</span>;
+}
