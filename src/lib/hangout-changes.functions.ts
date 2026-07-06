@@ -357,9 +357,31 @@ export const proposeHangoutChange = createServerFn({ method: "POST" })
     });
     const proposerName = viewer.display_name ?? (viewer.type === "ned" ? "Ned" : "Someone");
     const hangoutTitle = hangout.title ?? hangout.pitch ?? "Your hangout";
+
+    // Venue label for the "Suggest a time" email
+    const currentVenueLabel = (hangout as any).venue
+      ? `${(hangout as any).venue.name}${(hangout as any).venue.location ? ` · ${(hangout as any).venue.location}` : ""}`
+      : hangout.custom_venue_name
+        ? `${hangout.custom_venue_name}${hangout.custom_venue_location ? ` · ${hangout.custom_venue_location}` : ""}`
+        : "TBD";
+
     await Promise.allSettled(
       (others ?? []).map((p: any) => {
         if (!p.email) return Promise.resolve();
+        if (isUnscheduledInit) {
+          // Exclusive path: send the "Ned suggested a time" email, not the generic proposal email.
+          return sendTimeSuggestedEmail({
+            to: p.email,
+            recipientName: p.display_name ?? "there",
+            hangoutTitle,
+            venue: currentVenueLabel,
+            suggestedWhen: newSnapshot.start_time
+              ? new Date(newSnapshot.start_time).toLocaleString("en-GB", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Europe/London" })
+              : "TBD",
+            comment: data.comment ?? null,
+            actionUrl: participantUrl(p),
+          });
+        }
         return sendChangeProposedEmail({
           to: p.email,
           recipientName: p.display_name ?? "there",
