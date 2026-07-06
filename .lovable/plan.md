@@ -1,97 +1,95 @@
+## Person History (Relationship Timeline) — v1
 
-## Hangout Cancellation Feature (revised)
+Read-only admin feature showing every hangout tied to one person, identified by normalized email. No new tables. No changes to existing flows, writes, or permissions.
 
-Reuses `requests.hangout_status` (setting it to `cancelled`) and adds audit fields. Cancellation is instant, admin-only, and final for now (schema does not preclude a future reopen).
+### 1. Identity helper
 
-### 1. Database migration
+Add a shared helper in `src/lib/nedate.ts`:
 
-Add to `public.requests`:
-- `cancelled_at timestamptz`
-- `cancelled_by text` (stores `"ned"`)
-- `cancellation_comment text`
+```
+normalizeEmail(email): string | null   // trim + lowercase, returns null if empty
+displayNameFor(name, email): string    // name if non-empty, else email local-part
+```
 
-No new tables. No data deletes anywhere in this feature.
+All matching/display logic uses these — no duplicated trim/lowercase.
 
-### 2. Server: `adminCancelHangout` in `src/lib/hangouts.functions.ts`
+### 2. Server — `src/lib/hangouts.functions.ts`
 
-Inputs: `hangoutId`, `adminPassword`, optional `comment`.
+Both new functions are admin-only (`assertAdmin`), use `supabaseAdmin`, and never mutate.
 
-Behaviour:
-- `assertAdmin(pw)`.
-- Load hangout + venue. Reject if not found, or if `hangout_status` is already terminal (`cancelled` or `completed`) — completed hangouts cannot later become cancelled.
-- Update parent: `hangout_status='cancelled'`, `cancelled_at=now()`, `cancelled_by='ned'`, `cancellation_comment`.
-- Invalidate open change proposals: `hangout_change_requests` rows with `status='pending'` for this hangout → `status='rejected'`, `responder_comment='Hangout cancelled'`, `responded_at=now()`. (This is proposal state, not join-request state.)
-- Public hangout only: cascade to child join-request rows (`parent_hangout_id = id`) — set their `hangout_status='cancelled'`. Leave `request_status` unchanged (pending stays pending, approved stays approved). Tracking pages will treat `hangout_status='cancelled'` as the primary state.
-- Collect recipients:
-  - `friend_request`: `requester_email` on the row.
-  - `public_hangout`: all invitees on the parent + all join-request child rows regardless of `request_status` (pending and approved both get notified; only excluded state is a pre-existing `hangout_status='cancelled'` child, which shouldn't exist here).
-  - `private_hangout`: all invitees, any response status.
-- Send new `sendHangoutCancelledEmail` per recipient with the right tracking URL (`/r/<slug>` for requester/joiners, `/i/<slug>` for invitees).
-- Return `{ ok: true, notified }`.
+**`listPeople({ adminPassword })`**
+- Read `hangout_participants` where `email is not null and email <> ''`.
+- Group in JS by `normalizeEmail(email)`; ignore null results.
+- Per group:
+  - `display_name`: most recent non-empty `display_name` by `updated_at`, else `null`. UI applies `displayNameFor`.
+  - Distinct `hangout_id` set.
+- Join `requests` for those hangout ids and compute:
+  - `total`, `completed`, `cancelled`, `upcoming` (`hangout_status='active' AND start_time >= now()`).
+  - `latest_hangout_record`: newest by `start_time` (fallback `created_at`) regardless of status → `{ id, title, venue_name, start_time, hangout_status, category }`.
+  - `last_completed_hangout`: newest `hangout_status='completed'` or `null`.
+- Sort people by `latest_hangout_record` time desc.
 
-### 3. Server-side read-only guardrails
+**`getPersonHistory({ email, adminPassword })`**
+- Normalize input email.
+- Fetch matching `hangout_participants` (active + inactive).
+- Collapse to one entry per `hangout_id`:
+  - Prefer `is_active=true` row.
+  - Else most recent by `updated_at`.
+  - Keep that row's `type` (role: requester/invitee/attendee) and `role_source` (friend_request/invite/join_request).
+- Fetch parent `requests` joined with `venues` for that id set.
+- Fetch `hangout_change_requests` for that id set; group in JS:
+  - `changes: { pending, approved, rejected, total, latest_resolved: { status, responded_at } | null }`.
+- Return `{ person: { email, display_name }, hangouts: [...] }`.
+- Sort hangouts by `start_time` desc, fallback `created_at` desc when `start_time` null.
+- Each item: `{ id, title, hangout_kind, visibility, category, start_time, end_time, venue: { name, location, image_url }, hangout_status, cancelled_at, cancellation_comment, role, source, created_at, changes }`.
 
-Rule enforced everywhere: **only `hangout_status='active'` hangouts participate in active workflows.** Any non-active status (including `cancelled` and `completed`) must reject writes and be excluded from active listings.
+### 3. Admin UI — `src/routes/admin.tsx`
 
-Concretely:
-- `submitJoinRequest`: parent lookup already filters `hangout_status='active'` — keep.
-- `respondToInvite`: fetch parent; reject with `hangout_not_active` if not `active`.
-- `adminAddInvitees`, `adminRemoveInvitee`, `adminRemoveJoiner`, `adminApproveJoiner`/reject-join, `sendBulkMessage`, any admin edit fn: load parent; reject if not `active`.
-- `src/lib/hangout-changes.functions.ts` (`proposeChange`, `respondToChange`, reconfirm-attendance write paths): reject if parent hangout is not `active`.
-- Any listing that represents "active/upcoming work" (`listUpcomingPublicHangouts` — already correct; admin's active-hangout groupings; any future reminder/background job) must filter `hangout_status='active'`. This is documented in a short comment at the top of `hangouts.functions.ts` so future jobs follow the same rule.
+Add a **"People"** tab alongside existing admin tabs.
 
-Cancelled/completed hangouts remain fully readable — only writes are blocked.
+**People list**
+- Loads `listPeople` on tab open.
+- Client-side substring search over name + email.
+- Card per person:
+  ```
+  Alice Smith
+  alice@example.com
+  5 hangouts · 3 completed · 1 cancelled · 1 upcoming
+  Latest: 🎢 Thorpe Park — 12 Feb 2026 (Upcoming)
+  Last completed: ☕ Coffee — 3 Jan 2026
+  [View history]
+  ```
+- Sorted by latest activity desc.
 
-### 4. Email template
+**Person History modal**
+- Header: display name + email.
+- Summary cards: Total · Completed · Upcoming · Cancelled · Latest hangout · Last completed.
+- Timeline grouped by month (newest first). Per item:
+  - Category emoji + title, status pill.
+  - Role + source badges (e.g. "Invitee · via invite").
+  - Venue + formatted date range.
+  - Change summary when `changes.total > 0`: `2 pending · 3 resolved · latest approved 12 Feb`. No full diff/history in v1.
+  - Cancellation note if cancelled.
+  - Click → switch to Hangouts tab, `location.hash = 'hangout-<id>'`, scroll to `#hangout-<id>`.
 
-Add `sendHangoutCancelledEmail` in `src/lib/email.server.ts`:
-- Subject: `Cancelled: <title>`.
-- Body: clear "This hangout has been cancelled" headline, scheduled date/time, venue, optional Ned comment in the highlighted note card, button to the recipient's tracking URL.
-- Uses existing `wrap` / `btn` helpers.
+**Hangout rows in Hangouts tab**
+- Add stable `id="hangout-<id>"` attribute on each existing hangout row (no visual changes).
 
-### 5. Admin UI (`src/routes/admin.tsx`)
+### 4. Rules
 
-On every hangout row where `hangout_status='active'` (Ned-created and friend-request):
-- Add a red `Cancel` button next to existing actions.
-- On click, open a confirm modal:
-  - Copy: **"This will cancel the hangout and notify all affected participants."**
-  - Optional comment textarea (max 2000 chars).
-  - Confirm / Cancel buttons.
-- On confirm: call `adminCancelHangout`, toast notified count, refresh list.
+- Match key everywhere: `normalizeEmail(email)`. Never name.
+- Null/empty emails excluded from People list.
+- One timeline entry per `hangout_id`, even with multiple participant rows.
+- Display name is derived at render (`displayNameFor`); no writes back.
+- Read-only end-to-end.
 
-For rows where `hangout_status='cancelled'`:
-- Show a `Cancelled` badge and dim the row.
-- Hide Approve/Reject-request, Edit, Message, Add-invitees, Remove-participant, Propose-change, and the Cancel button itself.
-- Keep participant list, change-proposal history, and cancellation comment visible for audit.
+### 5. Out of scope
 
-Rows where `hangout_status='completed'`: also hide the Cancel button (guard mirrors server rejection).
+- No new tables (`contacts` untouched — invite address book).
+- No participant/permission changes, no email sends, no writes.
+- No relationship notes/preferences/favourites — future work.
 
-### 6. Participant pages (`/r/<slug>` and `/i/<slug>`)
-
-When the loaded hangout has `hangout_status='cancelled'`:
-- Prominent red "Cancelled" banner at the top.
-- Show `cancellation_comment` in a highlighted note card if present.
-- Show final hangout details (venue, when) for reference.
-- **Keep history visible in read-only mode**: existing change-proposal / decision history, attendance history, invite response history, join-request status — all still rendered, just no interactive controls.
-- Hide/disable interactive controls: invite response buttons, join-request submit form, attendance reconfirm buttons, `HangoutAgreementPanel` propose/approve/reject actions.
-- `hangout_status='cancelled'` is treated as the primary state on these pages regardless of `request_status` — a joiner whose `request_status='approved'` still sees "cancelled" as the headline.
-
-### 7. Homepage
-
-`listUpcomingPublicHangouts` already filters `hangout_status='active'` — cancelled hangouts disappear automatically. No change needed; verify only.
-
-### 8. Types
-
-After the migration is approved, `src/integrations/supabase/types.ts` regenerates automatically to expose the new columns. No manual edit.
-
-### Acceptance mapping
-
-- Ned-only cancel from admin → step 5 + `assertAdmin` in step 2.
-- All participants notified → step 2 + step 4.
-- Removed from public discovery → step 7.
-- Cancelled state on participant pages, history kept → step 6.
-- Read-only everywhere; only active participates in workflows → step 3.
-- No cancelling completed/cancelled hangouts → step 2 terminal-state guard.
-- Join-request rows keep their `request_status` → step 2 cascade rule.
-- Audit preserved → step 1 columns, no deletes.
-- Existing change proposals invalidated → step 2.
+### Files touched
+- `src/lib/nedate.ts` — add `normalizeEmail`, `displayNameFor`.
+- `src/lib/hangouts.functions.ts` — add `listPeople`, `getPersonHistory`.
+- `src/routes/admin.tsx` — add People tab, list, Person History modal, `id="hangout-<id>"` anchors.

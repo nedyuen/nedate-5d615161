@@ -97,3 +97,19 @@ export function venueDisplay(h: {
     imageUrl: h.custom_venue_image_url ?? null,
   };
 }
+
+/** Normalize an email address for identity matching. Returns null when empty/invalid. */
+export function normalizeEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const t = email.trim().toLowerCase();
+  return t.length > 0 ? t : null;
+}
+
+/** Display name for a person; falls back to email local-part, else "Unknown". */
+export function displayNameFor(name: string | null | undefined, email: string | null | undefined): string {
+  const n = (name ?? "").trim();
+  if (n) return n;
+  const e = (email ?? "").trim();
+  if (e && e.includes("@")) return e.split("@")[0];
+  return e || "Unknown";
+}
