@@ -749,6 +749,7 @@ export const adminAddInvitees = createServerFn({ method: "POST" })
       .maybeSingle();
     if (hErr || !hangout) return { ok: false as const, error: "not_found" as const };
     if ((hangout as any).initiator !== "ned") return { ok: false as const, error: "not_owner" as const };
+    if ((hangout as any).hangout_status !== "active") return { ok: false as const, error: "hangout_not_active" as const };
 
     const { data: invitees, error: iErr } = await supabaseAdmin
       .from("hangout_invitees")
