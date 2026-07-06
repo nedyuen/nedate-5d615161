@@ -49,6 +49,7 @@ function StatusPage() {
   const meta = categoryMeta(req.category);
   const status = req.request_status ?? "pending";
   const v = venueDisplay(req);
+  const isCancelled = req.hangout_status === "cancelled";
 
   return (
     <div className="min-h-screen bg-background">
@@ -66,20 +67,37 @@ function StatusPage() {
 
       <main className="px-5 py-10 sm:px-10">
         <div className="mx-auto max-w-2xl">
-          <StatusBadge status={status} />
+          {isCancelled && (
+            <div className="mb-6 rounded-3xl border-2 border-red-300 bg-red-50 p-5">
+              <div className="flex items-center gap-2 text-red-800 font-medium">
+                <X className="size-4" /> This hangout has been cancelled
+              </div>
+              <p className="mt-1 text-sm text-red-900/80">It will no longer take place. Details below are kept for reference.</p>
+              {req.cancellation_comment && (
+                <div className="mt-3 rounded-2xl bg-white/60 border border-red-200 p-3 text-sm text-red-900 italic">
+                  "{req.cancellation_comment}"
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isCancelled && <StatusBadge status={status} />}
 
           <h1 className="mt-5 font-display text-4xl text-primary sm:text-5xl text-balance">
-            {status === "approved" && "Ned said yes ✨"}
-            {status === "rejected" && "Not this time"}
-            {status === "pending" && "Sitting in Ned's inbox"}
+            {isCancelled && "Cancelled"}
+            {!isCancelled && status === "approved" && "Ned said yes ✨"}
+            {!isCancelled && status === "rejected" && "Not this time"}
+            {!isCancelled && status === "pending" && "Sitting in Ned's inbox"}
           </h1>
-          <p className="mt-3 text-muted-foreground">
-            {status === "pending" && "Your request is on its way. You'll know the moment Ned responds."}
-            {status === "approved" && "It's a date. Details below — Ned will reach out by email."}
-            {status === "rejected" && "Ned can't make this one work. See his note below."}
-          </p>
+          {!isCancelled && (
+            <p className="mt-3 text-muted-foreground">
+              {status === "pending" && "Your request is on its way. You'll know the moment Ned responds."}
+              {status === "approved" && "It's a date. Details below — Ned will reach out by email."}
+              {status === "rejected" && "Ned can't make this one work. See his note below."}
+            </p>
+          )}
 
-          {req.admin_comment && (
+          {req.admin_comment && !isCancelled && (
             <div className="mt-6 rounded-3xl bg-accent/15 p-5 border border-accent/30">
               <div className="text-xs font-medium text-primary mb-1">A note from Ned</div>
               <div className="text-foreground">{req.admin_comment}</div>
